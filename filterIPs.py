@@ -32,7 +32,7 @@ def print_top_ips(top_ips):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python script.py <path_to_csv_file>")
+        print("Usage: python filterIPs.py <path_to_csv_file>")
         sys.exit(1)
 
     file_path = sys.argv[1]

@@ -28,18 +28,13 @@ def run_all():
     logger.debug(f"New record value: {new_record}")
 
     # 3. Run cfRecUpdate.py using the filtered IPs
-    # Get zone_id and record_name from environment variables
-    zone_id = os.getenv('CLOUDFLARE_ZONE_ID')
-    record_name = os.getenv('CLOUDFLARE_RECORD_NAME')
-
-    if not zone_id or not record_name:
-        logger.critical("CLOUDFLARE_ZONE_ID or CLOUDFLARE_RECORD_NAME environment variable not set.")
-        raise ValueError("Please set the required environment variables.")
-
-    record_type = "A"  # Remains hardcoded as it's unlikely to change
+    # Get variables
+    if len(sys.argv) != 4:
+        print("Usage: python Quick Run-All.py <cloudflare_api_token> <cloudflare_zone_id> <cloudflare_record_name>")
+        sys.exit(1)
 
     # Get API token (prefer environment variable, then optional file)
-    api_token = os.getenv('CLOUDFLARE_API_TOKEN')
+    api_token = sys.argv[1] or os.getenv('CLOUDFLARE_API_TOKEN')
     if not api_token:
         token_file = Path(__file__).parent / ".cloudflare_api_token"  # Store token in a file in the same directory
         if token_file.exists():
@@ -49,6 +44,14 @@ def run_all():
             logger.critical("API Token is not provided via environment variable or .cloudflare_api_token file")
             raise ValueError("Please provide the CLOUDFLARE_API_TOKEN environment variable or create a .cloudflare_api_token file")
 
+    zone_id = sys.argv[2] or os.getenv('CLOUDFLARE_ZONE_ID')
+    record_name = sys.argv[3] or os.getenv('CLOUDFLARE_RECORD_NAME')
+
+    if not zone_id or not record_name:
+        logger.critical("CLOUDFLARE_ZONE_ID or CLOUDFLARE_RECORD_NAME environment variable not set.")
+        raise ValueError("Please set the required environment variables.")
+
+    record_type = "A"  # Remains hardcoded as it's unlikely to change
 
     dns_updater = CloudflareDNSUpdater(api_token, zone_id)
     try:
