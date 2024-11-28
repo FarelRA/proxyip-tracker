@@ -29,10 +29,6 @@ def run_all():
 
     # 3. Run cfRecUpdate.py using the filtered IPs
     # Get variables
-    if len(sys.argv) != 4:
-        print("Usage: python Quick Run-All.py <cloudflare_api_token> <cloudflare_zone_id> <cloudflare_record_name>")
-        sys.exit(1)
-
     # Get API token (prefer environment variable, then optional file)
     api_token = sys.argv[1] or os.getenv('CLOUDFLARE_API_TOKEN')
     if not api_token:
