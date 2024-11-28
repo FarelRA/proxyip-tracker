@@ -29,8 +29,8 @@ def run_all():
 
     # 3. Run cfRecUpdate.py using the filtered IPs
     # Get zone_id and record_name from environment variables
-    zone_id = os.environ.get("CLOUDFLARE_ZONE_ID")
-    record_name = os.environ.get("CLOUDFLARE_RECORD_NAME")
+    zone_id = os.getenv('CLOUDFLARE_ZONE_ID')
+    record_name = os.getenv('CLOUDFLARE_RECORD_NAME')
 
     if not zone_id or not record_name:
         logger.critical("CLOUDFLARE_ZONE_ID or CLOUDFLARE_RECORD_NAME environment variable not set.")
