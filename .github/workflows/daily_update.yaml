@@ -10,10 +10,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5.3.0
         with:
           python-version: '3.x'
 
@@ -21,7 +21,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run the script
-        run: python run_all.py
+        run: python "Quick Run-All.py"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }} # API token still uses secrets
           CLOUDFLARE_ZONE_ID: ${{ env.CLOUDFLARE_ZONE_ID }} # Access env variables
