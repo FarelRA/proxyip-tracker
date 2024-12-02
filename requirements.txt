@@ -1,1 +1,3 @@
 requests
+ping3
+geoip2
