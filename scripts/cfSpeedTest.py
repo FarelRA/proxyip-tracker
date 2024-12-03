@@ -73,14 +73,13 @@ class CloudflareIPTester:
         self.config.read(config_path)
 
         # Configuration parsing with type conversion and validation
-        self.max_ips = self._get_config_int('cfRegTest', 'max_ips', 10)
-        self.max_ping = self._get_config_int('cfRegTest', 'max_ping', 100)
-        self.test_size = self._get_config_int('cfRegTest', 'test_size', 1024)
-        self.min_download_speed = self._get_config_float('cfRegTest', 'min_download_speed', 5.0)
-        self.min_upload_speed = self._get_config_float('cfRegTest', 'min_upload_speed', 2.0)
-        self.regions = self._get_config_list('cfRegTest', 'regions', ['Europe, ', 'Asia_Pacific'])
-        self.output_file = self._get_config_str('cfRegTest', 'output_file', 'ip_performance.csv')
-        self.ip_file = self._get_config_str('cfRegTest', 'file_ips', 'ips.txt')
+        self.max_ips = self._get_config_int('cfSpeedTest', 'max_ips', 10)
+        self.max_ping = self._get_config_int('cfSpeedTest', 'max_ping', 100)
+        self.test_size = self._get_config_int('cfSpeedTest', 'test_size', 1024)
+        self.min_download_speed = self._get_config_float('cfSpeedTest', 'min_download_speed', 5.0)
+        self.min_upload_speed = self._get_config_float('cfSpeedTest', 'min_upload_speed', 2.0)
+        self.output_file = self._get_config_str('cfSpeedTest', 'output_file', 'ip_performance.csv')
+        self.ip_file = self._get_config_str('cfSpeedTest', 'file_ips', 'ips.txt')
 
         # Check OpenSSL availability
         self.openssl_available = bool(ssl.OPENSSL_VERSION)
@@ -105,15 +104,6 @@ class CloudflareIPTester:
         """Safely get string configuration value."""
         try:
             return self.config.get(section, key)
-        except configparser.NoOptionError:
-            logging.warning(f"Using default value {default} for {key}")
-            return default
-
-    def _get_config_list(self, section: str, key: str, default: List[str]) -> List[str]:
-        """Safely get list configuration value."""
-        try:
-            value = self.config.get(section, key)
-            return [region.strip() for region in value.split(',') if region.strip()]
         except configparser.NoOptionError:
             logging.warning(f"Using default value {default} for {key}")
             return default
@@ -221,9 +211,6 @@ class CloudflareIPTester:
         :param ip: IP address to ping
         :return: Ping time in milliseconds
         """
-        if not PING_AVAILABLE:
-            raise RuntimeError("Ping functionality unavailable. Install the ping3 library.")
-
         try:
             start_time = time.time()
             response_time = ping3.ping(ip, timeout=self.max_ping/1000)
@@ -235,6 +222,34 @@ class CloudflareIPTester:
             return int((time.time() - start_time) * 1000)
         except Exception as e:
             logging.error(f"Ping failed for {ip}: {e}")
+            return -1
+
+    def get_ping_fallback(self, ip: str) -> int:
+        """
+        Get ping for an IP address. Fallback method using requests.
+
+        :param ip: IP address to ping
+        :return: Ping time in milliseconds
+        """
+        download_size = 8
+        url = f"https://speed.cloudflare.com/__down?bytes={download_size}"
+        headers = {'Host': 'speed.cloudflare.com'}
+
+        params = {
+            'resolve': f"speed.cloudflare.com:443:{ip}",
+            **({"alpn": "h2,http/1.1", "utls": "random"} if self.openssl_available else {})
+        }
+
+        try:
+            start_time = time.time()
+            response = requests.get(url, headers=headers, params=params, timeout=2)
+            end_time = time.time() - start_time
+
+            rtt = int((end_time - start_time) * 1000)  # Convert to milliseconds
+            logging.info(f"HTTP-based ping for IP {ip}: {rtt} ms")
+            return rtt
+        except requests.RequestException as e:
+            logging.error(f"HTTP-based ping failed for IP {ip}: {e}")
             return -1
 
     def get_download_speed(self, ip: str) -> float:
@@ -255,7 +270,7 @@ class CloudflareIPTester:
 
         try:
             start_time = time.time()
-            response = requests.get(url, headers=headers, params=params, timeout=30)
+            response = requests.get(url, headers=headers, params=params, timeout=10)
             download_time = time.time() - start_time
 
             logging.info(f"Download speed: {round(download_size / download_time * 8 / 1_000_000, 2)} Mbps")
@@ -286,13 +301,40 @@ class CloudflareIPTester:
 
         try:
             start_time = time.time()
-            requests.post(url, headers=headers, params=params, files=files, timeout=30)
+            requests.post(url, headers=headers, params=params, files=files, timeout=10)
             upload_time = time.time() - start_time
 
             logging.info(f"Upload speed: {round(upload_size / upload_time * 8 / 1_000_000, 2)} Mbps")
             return round(upload_size / upload_time * 8 / 1_000_000, 2)
         except requests.RequestException:
             return 0.0
+
+    def map_ips_to_regions(self, ip_list):
+        # Fetch colo data
+        logging.info("Fetching Cloudflare colo data.")
+        colo_data = self.fetch_cloudflare_colo_data()
+        if not colo_data:
+            raise RuntimeError("Critical error: Failed to fetch Cloudflare colo data.")
+
+        # Dictionary to store regions and their IPs
+        region_ip_map = {}
+
+        # Process each IP
+        for ip in ip_list:
+            colo = self.get_colo_from_ip(ip)
+            if not colo:
+                logging.info(f"Could not determine colo for IP {ip}")
+                continue
+
+            region = self.get_region_from_colo(colo, colo_data)
+            if not region:
+                logging.info(f"Could not determine region for colo {colo}")
+                continue
+
+            # Add IP to the corresponding region
+            region_ip_map.setdefault(region, []).append(ip)
+
+        return region_ip_map
 
     def filter_ips_by_ping(self, ip_list: List[str]) -> List[Tuple[str, int]]:
         """
@@ -304,7 +346,12 @@ class CloudflareIPTester:
         ip_ping_results = []
         for ip in ip_list:
             try:
-                ping_time = self.get_ping(ip)
+                if PING_AVAILABLE:
+                    ping_time = self.get_ping(ip)
+                else:
+                    logging.warning("Ping functionality limited. Using fallback...")
+                    ping_time = self.get_ping_fallback(ip)
+
                 if ping_time > 0 and ping_time <= self.max_ping:
                     ip_ping_results.append((ip, ping_time))
             except Exception as e:
@@ -316,8 +363,9 @@ class CloudflareIPTester:
 
     def run_tests(self) -> List[IPPerformanceMetrics]:
         """
-        Run IP performance tests after filtering by ping.
+        Run comprehensive IP performance tests.
 
+        :param stdscr: Curses window for display (optional)
         :return: List of successful IP performance metrics
         """
         # Read and shuffle IPs
@@ -327,54 +375,49 @@ class CloudflareIPTester:
         except Exception as e:
             raise ValueError(f"Failed to read 'ip_list': {e}")
 
-        # Filter IPs by ping
-        logging.info("Starting ping tests to filter IPs.")
-        filtered_ip_ping_results = self.filter_ips_by_ping(ip_list)
-        if not filtered_ip_ping_results:
-            raise RuntimeError(f"No IPs passed the ping filter.")
+        # Get map of corresponding region for each ip
+        logging.info("Getting region for each IPs.")
+        ip_region_map = self.map_ips_to_regions(ip_list)
+        if not ip_region_map:
+            raise RuntimeError("Can not get regions of IPs")
 
-        # Fetch colo data
-        logging.info("Fetching Cloudflare colo data.")
-        colo_data = self.fetch_cloudflare_colo_data()
-        if not colo_data:
-            raise RuntimeError("Critical error: Failed to fetch Cloudflare colo data.")
-
-        # Perform detailed tests on filtered IPs
+        # Perform tests
         successful_ips: List[IPPerformanceMetrics] = []
-        for ip, ping in filtered_ip_ping_results:
-            logging.info(f"Testing IP: {ip}")
+        for region, ips in ip_region_map.items():
+            # Filter IPs by ping
+            logging.info(f"Starting ping tests to filter IPs in region {region}.")
+            filtered_ip = self.filter_ips_by_ping(ips)
+            if not filtered_ip:
+                logging.warning("No IPs passed the ping filter.")
+                continue
 
-            try:
-                # Get colo and region
-                colo = self.get_colo_from_ip(ip)
-                if not colo:
-                    logging.info(f"Could not determine colo for IP {ip}")
-                    continue
+            # Testing IPs
+            for ip, ping in filtered_ip:
+                logging.info(f"Testing IP: {ip}")
 
-                region = self.get_region_from_colo(colo, colo_data)
-                if region not in self.regions:
-                    logging.info(f"IP {ip} not in desired regions")
-                    continue
+                try:
+                    # Speed tests
+                    download_speed = self.get_download_speed(ip)
+                    if download_speed < self.min_download_speed:
+                        logging.info(f"IP {ip} download speed too low: {download_speed}")
+                        continue
 
-                # Get speed metrics
-                download_speed = self.get_download_speed(ip)
-                upload_speed = self.get_upload_speed(ip)
+                    upload_speed = self.get_upload_speed(ip)
+                    if upload_speed < self.min_upload_speed:
+                        logging.info(f"IP {ip} upload speed too low: {upload_speed}")
+                        continue
 
-                if download_speed < self.min_download_speed or upload_speed < self.min_upload_speed:
-                    logging.info(f"IP {ip} did not meet speed thresholds.")
-                    continue
+                    # Save successful metrics
+                    successful_ips.append(IPPerformanceMetrics(
+                        ip=ip,
+                        region=region,
+                        ping=ping,
+                        upload_speed=upload_speed,
+                        download_speed=download_speed
+                    ))
 
-                # Save successful metrics
-                successful_ips.append(IPPerformanceMetrics(
-                    ip=ip,
-                    region=region,
-                    ping=ping,
-                    upload_speed=upload_speed,
-                    download_speed=download_speed
-                ))
-
-            except Exception as e:
-                logging.error(f"Unexpected error testing IP {ip}: {e}")
+                except Exception as e:
+                    logging.error(f"Unexpected error testing IP {ip}: {e}")
 
         return successful_ips
 

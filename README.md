@@ -43,7 +43,6 @@ This project automatically updates Cloudflare DNS records with the fastest IP ad
 
 This project is provided as-is.  Use it at your own risk.  Ensure you understand how it works and configure it correctly for your specific needs.  The author is not responsible for any issues or damages caused by using this project.
 
-
 ## Contributing
 
 Contributions are welcome!  Feel free to open issues or submit pull requests.
