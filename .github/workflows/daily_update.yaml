@@ -5,6 +5,8 @@ on:
   schedule:
     - cron: "0 */3 * * *"  # Runs every three hours
 
+permissions: write-all
+
 jobs:
   update_ip:
     runs-on: ubuntu-latest
