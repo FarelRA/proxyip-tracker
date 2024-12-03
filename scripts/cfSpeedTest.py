@@ -18,8 +18,15 @@ import configparser
 from io import StringIO
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
+
+# Logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Optional dependencies with graceful fallback
 try:
@@ -28,15 +35,6 @@ try:
 except ImportError:
     PING_AVAILABLE = False
     logging.warning("ping3 module not found. Ping functionality will be limited.")
-
-# Logging configuration
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
-)
 
 @dataclass
 class IPPerformanceMetrics:
@@ -310,52 +308,63 @@ class CloudflareIPTester:
         except requests.RequestException:
             return 0.0
 
-    def map_ips_to_regions(self, ip_list):
-        # Fetch colo data
+    def map_ips_to_regions(self, ip_list: List[str]) -> Dict[str, List[str]]:
+        """
+        Map IPs to their corresponding regions using multithreading.
+
+        :param ip_list: List of IP addresses
+        :return: Dictionary mapping regions to IPs
+        """
         logging.info("Fetching Cloudflare colo data.")
         colo_data = self.fetch_cloudflare_colo_data()
         if not colo_data:
             raise RuntimeError("Critical error: Failed to fetch Cloudflare colo data.")
 
-        # Dictionary to store regions and their IPs
         region_ip_map = {}
 
-        # Process each IP
-        for ip in ip_list:
+        def process_ip(ip):
             colo = self.get_colo_from_ip(ip)
             if not colo:
-                logging.info(f"Could not determine colo for IP {ip}")
-                continue
-
+                return None, None
             region = self.get_region_from_colo(colo, colo_data)
-            if not region:
-                logging.info(f"Could not determine region for colo {colo}")
-                continue
+            return region, ip
 
-            # Add IP to the corresponding region
-            region_ip_map.setdefault(region, []).append(ip)
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            future_to_ip = {executor.submit(process_ip, ip): ip for ip in ip_list}
+
+            for future in as_completed(future_to_ip):
+                try:
+                    region, ip = future.result()
+                    if region and ip:
+                        region_ip_map.setdefault(region, []).append(ip)
+                except Exception as e:
+                    logging.error(f"Error processing IP {future_to_ip[future]}: {e}")
 
         return region_ip_map
 
     def filter_ips_by_ping(self, ip_list: List[str]) -> List[Tuple[str, int]]:
         """
-        Filter IPs based on ping response and return the top `max_ips` along with their ping times.
+        Filter IPs based on ping response using multithreading.
 
-        :param ip_list: List of IP addresses to test
+        :param ip_list: List of IP addresses
         :return: List of tuples (IP, ping) for the top `max_ips` based on lowest ping
         """
-        ip_ping_results = []
-        for ip in ip_list:
-            try:
-                if PING_AVAILABLE:
-                    ping_time = self.get_ping(ip)
-                else:
-                    ping_time = self.get_ping_fallback(ip)
+        def ping_ip(ip):
+            if PING_AVAILABLE:
+                return ip, self.get_ping(ip)
+            return ip, self.get_ping_fallback(ip)
 
-                if ping_time > 0 and ping_time <= self.max_ping:
-                    ip_ping_results.append((ip, ping_time))
-            except Exception as e:
-                logging.warning(f"Ping test failed for {ip}: {e}")
+        ip_ping_results = []
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            future_to_ip = {executor.submit(ping_ip, ip): ip for ip in ip_list}
+
+            for future in as_completed(future_to_ip):
+                try:
+                    ip, ping_time = future.result()
+                    if ping_time > 0 and ping_time <= self.max_ping:
+                        ip_ping_results.append((ip, ping_time))
+                except Exception as e:
+                    logging.error(f"Error pinging IP {future_to_ip[future]}: {e}")
 
         # Sort by ping time and select the top `max_ips`
         ip_ping_results.sort(key=lambda x: x[1])
