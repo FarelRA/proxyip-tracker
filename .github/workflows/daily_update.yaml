@@ -3,7 +3,7 @@ name: Daily IP Update
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 17 * * *"  # Runs every day at midnight GMT+7
+    - cron: "0 */3 * * *"  # Runs three hours
 
 jobs:
   update_ip:
@@ -31,5 +31,5 @@ jobs:
 
       - name: Update upstream DNS record
         run: python "scripts/cfRecUpdate.py"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }} # API token still uses secrets
+        env: # Or as an environment variable
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
