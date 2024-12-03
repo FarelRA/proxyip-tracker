@@ -7,7 +7,7 @@ on:
 
 jobs:
   update_ip:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4.2.2
@@ -20,9 +20,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run the script
-        run: python "Quick Run-All.py"
+      - name: Get the Proxy IPs
+        run: python "scripts/getIPs.py"
+
+      - name: Test the Proxy IPs
+        run: python "scripts/cfSpeedTest.py"
+
+      - name: Map the IPs with domains name
+        run: python "scripts/mapDomain.py"
+
+      - name: Update upstream DNS record
+        run: python "scripts/cfRecUpdate.py"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }} # API token still uses secrets
-          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }} # Access env variables
-          CLOUDFLARE_RECORD_NAME: ${{ vars.CLOUDFLARE_RECORD_NAME }}
