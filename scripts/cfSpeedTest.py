@@ -322,13 +322,11 @@ class CloudflareIPTester:
         region_ip_map = {}
 
         def process_ip(ip):
-            logging.info(f"Getting region for IP: {ip}")
             colo = self.get_colo_from_ip(ip)
             if not colo:
                 return None, None
-            logging.info(f"Colo: {colo}")
             region = self.get_region_from_colo(colo, colo_data)
-            logging.info(f"Region: {region}")
+            logging.info(f"IP: {ip}; Colo: {colo}; Region: {region}")
             return region, ip
 
         with ThreadPoolExecutor(max_workers=20) as executor:
