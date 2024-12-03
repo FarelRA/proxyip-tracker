@@ -182,7 +182,6 @@ class CloudflareIPTester:
 
             for line in response.text.splitlines():
                 if line.startswith("colo="):
-                    logging.info(f"Colo: {line.split("=")[1]}")
                     return line.split("=")[1]
         except requests.RequestException as e:
             logging.error(f"Error fetching colo for IP {ip}: {e}")
@@ -199,7 +198,6 @@ class CloudflareIPTester:
         """
         for row in colo_data:
             if row.get('colo') == colo:
-                logging.info(f"Region: {row.get('region', 'Unknown').replace(" ", "_")}")
                 return row.get('region', 'Unknown').replace(" ", "_")
         return "Unknown"
 
@@ -215,9 +213,10 @@ class CloudflareIPTester:
             response_time = ping3.ping(ip, timeout=self.max_ping/1000)
 
             if response_time is not None and response_time > 0:
+                logging.info(f"Ping time for IP {ip}: {int(response_time * 1000)} ms")
                 return int(response_time * 1000)
 
-            logging.info(f"Ping time: {(time.time() - start_time) * 1000}")
+            logging.info(f"Ping time for IP {ip}: {(time.time() - start_time) * 1000} ms")
             return int((time.time() - start_time) * 1000)
         except Exception as e:
             logging.error(f"Ping failed for {ip}: {e}")
@@ -323,10 +322,13 @@ class CloudflareIPTester:
         region_ip_map = {}
 
         def process_ip(ip):
+            logging.info(f"Getting region for IP: {ip}")
             colo = self.get_colo_from_ip(ip)
             if not colo:
                 return None, None
+            logging.info(f"Colo: {colo}")
             region = self.get_region_from_colo(colo, colo_data)
+            logging.info(f"Region: {region}")
             return region, ip
 
         with ThreadPoolExecutor(max_workers=20) as executor:
