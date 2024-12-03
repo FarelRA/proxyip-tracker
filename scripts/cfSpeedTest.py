@@ -153,7 +153,7 @@ class CloudflareIPTester:
         """
         try:
             csv_url = "https://raw.githubusercontent.com/Netrvin/cloudflare-colo-list/refs/heads/main/DC-Colos.csv"
-            response = requests.get(csv_url, timeout=10)
+            response = requests.get(csv_url, timeout=4)
             response.raise_for_status()
 
             return list(csv.DictReader(StringIO(response.text)))
@@ -177,7 +177,7 @@ class CloudflareIPTester:
                 **({"alpn": "h2,http/1.1", "utls": "random"} if self.openssl_available else {})
             }
 
-            response = requests.get(url, headers=headers, params=params, timeout=10)
+            response = requests.get(url, headers=headers, params=params, timeout=4)
             response.raise_for_status()
 
             for line in response.text.splitlines():
@@ -240,7 +240,7 @@ class CloudflareIPTester:
 
         try:
             start_time = time.time()
-            response = requests.get(url, headers=headers, params=params, timeout=2)
+            response = requests.get(url, headers=headers, params=params, timeout=self.max_ping/1000)
             end_time = time.time()
 
             rtt = int((end_time - start_time) * 1000)  # Convert to milliseconds
@@ -268,7 +268,7 @@ class CloudflareIPTester:
 
         try:
             start_time = time.time()
-            response = requests.get(url, headers=headers, params=params, timeout=10)
+            response = requests.get(url, headers=headers, params=params, timeout=1)
             download_time = time.time() - start_time
 
             logging.info(f"Download speed: {round(download_size / download_time * 8 / 1_000_000, 2)} Mbps")
@@ -299,7 +299,7 @@ class CloudflareIPTester:
 
         try:
             start_time = time.time()
-            requests.post(url, headers=headers, params=params, files=files, timeout=10)
+            requests.post(url, headers=headers, params=params, files=files, timeout=1)
             upload_time = time.time() - start_time
 
             logging.info(f"Upload speed: {round(upload_size / upload_time * 8 / 1_000_000, 2)} Mbps")
