@@ -201,6 +201,7 @@ class CloudflareIPTester:
         """
         for row in colo_data:
             if row.get('colo') == colo:
+                logging.info(f"Region: {row.get('region', 'Unknown').replace(" ", "_")}")
                 return row.get('region', 'Unknown').replace(" ", "_")
         return "Unknown"
 
