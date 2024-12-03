@@ -244,7 +244,7 @@ class CloudflareIPTester:
         try:
             start_time = time.time()
             response = requests.get(url, headers=headers, params=params, timeout=2)
-            end_time = time.time() - start_time
+            end_time = time.time()
 
             rtt = int((end_time - start_time) * 1000)  # Convert to milliseconds
             logging.info(f"HTTP-based ping for IP {ip}: {rtt} ms")
@@ -350,7 +350,6 @@ class CloudflareIPTester:
                 if PING_AVAILABLE:
                     ping_time = self.get_ping(ip)
                 else:
-                    logging.warning("Ping functionality limited. Using fallback...")
                     ping_time = self.get_ping_fallback(ip)
 
                 if ping_time > 0 and ping_time <= self.max_ping:
