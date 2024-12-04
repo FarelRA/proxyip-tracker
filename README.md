@@ -58,6 +58,7 @@ This project automatically updates Cloudflare DNS records with the fastest IP ad
   - `test_size`: Data size for testing download/upload speeds (e.g., 5120 KB).
   - `min_download_speed`: Minimum acceptable download speed (e.g., 20 Mbps).
   - `min_upload_speed`: Minimum acceptable upload speed (e.g., 20 Mbps).
+  - `force_ping_fallback`: Force to use ping fallback method (http method) regardless `ping3` availability (e.g., True).
   - `output_file`: File to save the test results (e.g., `result/tested-ips.csv`).
 
 ### 3. **Map Domain**
