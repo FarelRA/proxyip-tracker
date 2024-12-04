@@ -78,6 +78,7 @@ class CloudflareIPTester:
         self.min_upload_speed = self._get_config_float('cfSpeedTest', 'min_upload_speed', 2.0)
         self.output_file = self._get_config_str('cfSpeedTest', 'output_file', 'ip_performance.csv')
         self.ip_file = self._get_config_str('cfSpeedTest', 'file_ips', 'ips.txt')
+        self.force_ping_fallback = self._get_config_bool('cfSpeedTest', 'force_ping_fallback', False)
 
         # Check OpenSSL availability
         self.openssl_available = bool(ssl.OPENSSL_VERSION)
@@ -103,6 +104,14 @@ class CloudflareIPTester:
         try:
             return self.config.get(section, key)
         except configparser.NoOptionError:
+            logging.warning(f"Using default value {default} for {key}")
+            return default
+
+    def _get_config_bool(self, section: str, key: str, default: bool) -> bool:
+        """Safely get boolean configuration value."""
+        try:
+            return self.config.getboolean(section, key)
+        except (configparser.NoOptionError, ValueError):
             logging.warning(f"Using default value {default} for {key}")
             return default
 
@@ -350,9 +359,10 @@ class CloudflareIPTester:
         :return: List of tuples (IP, ping) for the top `max_ips` based on lowest ping
         """
         def ping_ip(ip):
-            if PING_AVAILABLE:
-                return ip, self.get_ping(ip)
-            return ip, self.get_ping_fallback(ip)
+            if self.force_ping_fallback or not PING_AVAILABLE:
+                # Force fallback method if configured or `ping3` is unavailable
+                return ip, self.get_ping_fallback(ip)
+            return ip, self.get_ping(ip)
 
         ip_ping_results = []
         with ThreadPoolExecutor(max_workers=20) as executor:
