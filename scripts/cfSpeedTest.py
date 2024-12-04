@@ -238,12 +238,11 @@ class CloudflareIPTester:
         :param ip: IP address to ping
         :return: Ping time in milliseconds
         """
-        download_size = 8
-        url = f"https://speed.cloudflare.com/__down?bytes={download_size}"
-        headers = {'Host': 'speed.cloudflare.com'}
+        url = "https://cp.cloudflare.com/generate_204"
+        headers = {'Host': 'cp.cloudflare.com'}
 
         params = {
-            'resolve': f"speed.cloudflare.com:443:{ip}",
+            'resolve': f"cp.cloudflare.com:443:{ip}",
             **({"alpn": "h2,http/1.1", "utls": "random"} if self.openssl_available else {})
         }
 
