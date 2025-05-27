@@ -1,6 +1,6 @@
 # Cloudflare proxyIP DNS Updater
 
-This project automatically updates Cloudflare DNS records with the fastest IP addresses found by `iptest.exe`.  It's designed to be run as a scheduled GitHub Actions workflow on a Windows runner.
+This project automatically updates Cloudflare DNS records with the fastest proxy IP addresses found. It's designed to be run as a scheduled GitHub Actions workflow on a Ubuntu free runner.
 
 ## How it Works
 
@@ -16,7 +16,7 @@ This project automatically updates Cloudflare DNS records with the fastest IP ad
 
 ## GitHub Setup
 
-1. **Repository:** Clone this repository to your GitHub account.
+1. **Repository:** Clone/Fork this repository to your GitHub account.
 
 2. **Edit Configurations:** Edit the `config.ini` to your desired configs.
 
@@ -32,7 +32,7 @@ This project automatically updates Cloudflare DNS records with the fastest IP ad
 2. **Edit Configurations:** Edit the `config.ini` to your desired configs.
 
 3. **Set Environment Variables:**
-   - Set secret variable named `CLOUDFLARE_API_TOKEN` with your Cloudflare API token.
+   - Set environment variable named `CLOUDFLARE_API_TOKEN` with your Cloudflare API token.
 
 4. **Running:**
    - To get the Proxy IPs, run `python "scripts/getIPs.py"`
