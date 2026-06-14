@@ -7,8 +7,8 @@ def filter_ips():
     config = configparser.ConfigParser()
     config.read('config.ini')
 
-    ip_csv = config.get('mapDomain', 'ip_csv')
-    input_csv = config.get('mapDomain', 'input_csv')
+    ip_csv = config.get('mapDomain', 'file_ips')
+    input_csv = config.get('mapDomain', 'file_tests')
     output_csv = config.get('mapDomain', 'output_csv')
     print(f"IP CSV path: {ip_csv}")
     print(f"Input CSV path: {input_csv}")
