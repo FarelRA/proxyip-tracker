@@ -11,7 +11,6 @@ import os
 import ssl
 import csv
 import time
-import random
 import asyncio
 import threading
 import logging
@@ -321,7 +320,6 @@ class CloudflareIPTester:
 
         successful_ips: List[IPPerformanceMetrics] = []
         for region, ips in ip_region_map.items():
-            random.shuffle(ips)
             logging.info(f"Starting ping tests to filter IPs in region {region}.")
             filtered_ip = self.filter_ips_by_ping(ips)
             if not filtered_ip:
