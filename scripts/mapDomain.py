@@ -103,18 +103,21 @@ def filter_ips():
     print("Sorting data by Domain and Download speed...")
     filtered_data.sort(key=itemgetter(KEY_DOMAIN, KEY_DOWNLOAD), reverse=SORT_REVERSE)
 
-    # Cap the number of IPs per domain based on each region's max_ip limit
-    print("Limiting the number of IPs per domain...")
-    domain_ip_count = {domain: INIT_COUNT for domain in domain_map.values()}
+    # Cap the number of IPs per (domain, region) pair so each region
+    # independently gets its quota even when all map to the same domain
+    print("Limiting the number of IPs per domain per region...")
+    region_count = {}
     final_data = []
     for row in filtered_data:
         domain = row[KEY_DOMAIN]
-        if domain_ip_count[domain] < max_ips[row[KEY_REGION]]:
-            print(f"Adding IP '{row[KEY_IP]}' to domain '{domain}'")
+        region = row[KEY_REGION]
+        key = f"{domain}|{region}"
+        if region_count.get(key, INIT_COUNT) < max_ips[region]:
+            print(f"Adding IP '{row[KEY_IP]}' to domain '{domain}' (region {region})")
             final_data.append({KEY_DOMAIN: domain, KEY_IP: row[KEY_IP]})
-            domain_ip_count[domain] += 1
+            region_count[key] = region_count.get(key, INIT_COUNT) + 1
         else:
-            print(f"Skipping IP '{row[KEY_IP]}' for domain '{domain}' (max limit reached)")
+            print(f"Skipping IP '{row[KEY_IP]}' for domain '{domain}' region '{region}' (max limit reached)")
 
     # Write the final domain-to-IP mapping to CSV
     print("Writing data to output CSV...")
