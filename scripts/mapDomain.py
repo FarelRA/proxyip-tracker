@@ -1,4 +1,5 @@
 import csv
+import os
 import configparser
 from operator import itemgetter
 
@@ -61,6 +62,7 @@ def filter_ips():
 
     # Write to output CSV
     print("Writing data to output CSV...")
+    os.makedirs(os.path.dirname(output_csv) or ".", exist_ok=True)
     with open(output_csv, 'w', newline='') as outfile:
         writer = csv.DictWriter(outfile, fieldnames=['Domain', 'IP'])
         writer.writeheader()
