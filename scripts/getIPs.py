@@ -11,6 +11,7 @@ Scans ALL IPs in every CIDR range with no limits, using asyncio for maximum para
 """
 
 import asyncio
+import os
 import ssl
 import logging
 import configparser
@@ -27,7 +28,7 @@ logging.basicConfig(
 ORACLE_IP_RANGES_URL = "https://docs.oracle.com/en-us/iaas/tools/public_ip_ranges.json"
 CLOUDFLARE_HOST = "speed.cloudflare.com"
 CLOUDFLARE_PORT = 443
-TIMEOUT = 3
+TIMEOUT = 1
 MAX_CONCURRENT = 2000
 PROGRESS_INTERVAL = 50000
 
@@ -159,6 +160,7 @@ def main():
     proxy_ips = asyncio.run(scan_all(cidrs))
     proxy_ips.sort()
 
+    os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
     with open(output_file, 'w') as f:
         f.write("\n".join(proxy_ips) + ("\n" if proxy_ips else ""))
     logging.info(f"Saved {len(proxy_ips)} IPs to {output_file}")

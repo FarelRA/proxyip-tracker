@@ -13,6 +13,7 @@ import csv
 import time
 import random
 import asyncio
+import threading
 import logging
 import ipaddress
 import configparser
@@ -35,6 +36,17 @@ TIMEOUT = 4
 
 ssl_context = ssl.create_default_context()
 ssl_context.check_hostname = True
+
+_local = threading.local()
+
+def _run(coro):
+    """Run a coroutine in a per-thread event loop (avoids creating a new loop per call)."""
+    try:
+        loop = _local.loop
+    except AttributeError:
+        loop = asyncio.new_event_loop()
+        _local.loop = loop
+    return loop.run_until_complete(coro)
 
 
 @dataclass
@@ -205,7 +217,7 @@ class CloudflareIPTester:
 
     def get_colo_from_ip(self, ip: str) -> Optional[str]:
         """Fetch the colo code for a given IP via real proxy connection."""
-        status, body = asyncio.run(self._socket_request(ip, "/cdn-cgi/trace"))
+        status, body = _run(self._socket_request(ip, "/cdn-cgi/trace"))
         if status != 200:
             return None
         for line in body.decode(errors='replace').splitlines():
@@ -223,7 +235,7 @@ class CloudflareIPTester:
     def get_ping(self, ip: str) -> int:
         """Get ping via real proxy connection by measuring RTT."""
         start = time.time()
-        status, _ = asyncio.run(self._socket_request(ip, "/cdn-cgi/trace"))
+        status, _ = _run(self._socket_request(ip, "/cdn-cgi/trace"))
         if status == 200:
             rtt = int((time.time() - start) * 1000)
             logging.info(f"Ping for {ip}: {rtt} ms")
@@ -236,7 +248,7 @@ class CloudflareIPTester:
         path = f"/__down?bytes={download_size}"
 
         start = time.time()
-        status, body = asyncio.run(self._socket_request(ip, path))
+        status, body = _run(self._socket_request(ip, path))
         if status != 200 or not body:
             return 0.0
 
@@ -260,7 +272,7 @@ class CloudflareIPTester:
         ).encode() + body + f"\r\n--{boundary}--\r\n".encode()
 
         start = time.time()
-        status, response_body = asyncio.run(
+        status, response_body = _run(
             self._socket_request_raw(ip, path, payload, boundary)
         )
         if status == 0:
@@ -420,6 +432,7 @@ class CloudflareIPTester:
     def export_results(self, results: List[IPPerformanceMetrics]) -> None:
         """Export test results to CSV."""
         try:
+            os.makedirs(os.path.dirname(self.output_file) or ".", exist_ok=True)
             with open(self.output_file, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow(['IP', 'Region', 'Ping (ms)', 'Upload (Mbps)', 'Download (Mbps)'])
