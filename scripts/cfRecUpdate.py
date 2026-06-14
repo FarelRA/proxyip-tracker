@@ -6,13 +6,27 @@ import ipaddress
 from typing import List, Dict, Any, Optional
 import logging
 
-# Configure logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+# --- Config ---
+CONFIG_FILE = "config.ini"
+KEY_FILE_DOMAINS = "file_domains"
+KEY_ZONE_ID = "zone_id"
+
+# --- Cloudflare API ---
+CF_API_BASE_URL = "https://api.cloudflare.com/client/v4"
+ENV_API_TOKEN = "CLOUDFLARE_API_TOKEN"
+
+# --- DNS ---
+RECORD_TYPE_A = "A"
+RECORD_TYPE_AAAA = "AAAA"
+IPV6_VERSION = 6
+
+
 class CloudflareDNSUpdater:
-    def __init__(self, api_token, zone_id):
-        self.base_url = "https://api.cloudflare.com/client/v4"
+    def __init__(self, api_token: str, zone_id: str):
+        self.base_url = CF_API_BASE_URL
         self.headers = {
             "Authorization": f"Bearer {api_token}",
             "Content-Type": "application/json"
@@ -20,7 +34,8 @@ class CloudflareDNSUpdater:
         self.zone_id = zone_id
         logger.info("CloudflareDNSUpdater initialized")
 
-    def get_dns_records(self, record_name: Optional[str] = None, record_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_dns_records(self, record_name: Optional[str] = None,
+                        record_type: Optional[str] = None) -> List[Dict[str, Any]]:
         logger.info("Retrieving DNS records")
         params = {}
         if record_name:
@@ -56,20 +71,17 @@ class CloudflareDNSUpdater:
         updated_records = []
         existing_set = {(rec['content'], rec['name'], rec['type']) for rec in existing_records}
 
-        # Remove matching records from both new_content and the processing loop
         new_content_filtered = [
             ip for ip in new_content
             if (ip, record_name, record_type) not in existing_set
         ]
         logger.debug(f"Filtered new content (non-duplicates): {new_content_filtered}")
 
-        # Skip processing records already present in existing records
         remaining_existing_records = [
             rec for rec in existing_records
             if (rec['content'], rec['name'], rec['type']) not in {(ip, record_name, record_type) for ip in new_content}
         ]
 
-        # Update or create filtered records
         for i, content in enumerate(new_content_filtered):
             if i < len(remaining_existing_records):
                 record = remaining_existing_records[i]
@@ -94,7 +106,6 @@ class CloudflareDNSUpdater:
                 )
                 updated_records.append(new_record)
 
-        # Delete extra records not in the new content
         for extra_record in remaining_existing_records[len(new_content_filtered):]:
             logger.info(f"Deleting extra record with content: {extra_record['content']}")
             self.delete_dns_record(extra_record['id'])
@@ -102,7 +113,8 @@ class CloudflareDNSUpdater:
         logger.info(f"Completed updating DNS records for {record_name}")
         return updated_records
 
-    def update_dns_record(self, record_id: str, record_type: str, name: str, content: str, proxied: bool = False, ttl: int = 1) -> Dict[str, Any]:
+    def update_dns_record(self, record_id: str, record_type: str, name: str,
+                          content: str, proxied: bool, ttl: int) -> Dict[str, Any]:
         logger.debug(f"Updating record ID {record_id} to content: {content}")
         payload = {
             "type": record_type,
@@ -125,7 +137,8 @@ class CloudflareDNSUpdater:
 
         return response_data['result']
 
-    def create_dns_record(self, record_type: str, name: str, content: str, proxied: bool = False, ttl: int = 1) -> Dict[str, Any]:
+    def create_dns_record(self, record_type: str, name: str, content: str,
+                          proxied: bool, ttl: int) -> Dict[str, Any]:
         logger.debug(f"Creating record with content: {content}")
         payload = {
             "type": record_type,
@@ -165,7 +178,7 @@ class CloudflareDNSUpdater:
 
 def load_config():
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config.read(CONFIG_FILE)
     return config
 
 
@@ -184,20 +197,18 @@ def read_input_csv(input_csv: str) -> Dict[str, List[str]]:
 
 
 def get_record_type(ip: str) -> str:
-    """Determine DNS record type based on IP version."""
     try:
         addr = ipaddress.ip_address(ip)
-        return "AAAA" if addr.version == 6 else "A"
+        return RECORD_TYPE_AAAA if addr.version == IPV6_VERSION else RECORD_TYPE_A
     except ValueError:
-        return "A"
+        return RECORD_TYPE_A
 
 
 def main():
-    # Load configuration
     config = load_config()
-    input_csv = config.get('cfRecUpdate', 'file_domains')
-    zone_id = config.get('cfRecUpdate', 'zone_id')
-    api_token = os.getenv('CLOUDFLARE_API_TOKEN')
+    input_csv = config.get('cfRecUpdate', KEY_FILE_DOMAINS)
+    zone_id = config.get('cfRecUpdate', KEY_ZONE_ID)
+    api_token = os.getenv(ENV_API_TOKEN)
 
     if not api_token:
         logger.critical("API Token is not provided via environment variable.")
@@ -205,18 +216,16 @@ def main():
 
     dns_updater = CloudflareDNSUpdater(api_token, zone_id)
 
-    # Read input CSV and process DNS records
     domain_ips = read_input_csv(input_csv)
     for domain, ips in domain_ips.items():
-        # Group IPs by type (A / AAAA)
-        a_ips = [ip for ip in ips if get_record_type(ip) == "A"]
-        aaaa_ips = [ip for ip in ips if get_record_type(ip) == "AAAA"]
+        a_ips = [ip for ip in ips if get_record_type(ip) == RECORD_TYPE_A]
+        aaaa_ips = [ip for ip in ips if get_record_type(ip) == RECORD_TYPE_AAAA]
 
         if a_ips:
             logger.info(f"Updating A records for domain: {domain}")
             dns_updater.update_multiple_dns_records(
                 record_name=domain,
-                record_type="A",
+                record_type=RECORD_TYPE_A,
                 new_content=a_ips,
                 proxied=False,
                 ttl=1
@@ -226,7 +235,7 @@ def main():
             logger.info(f"Updating AAAA records for domain: {domain}")
             dns_updater.update_multiple_dns_records(
                 record_name=domain,
-                record_type="AAAA",
+                record_type=RECORD_TYPE_AAAA,
                 new_content=aaaa_ips,
                 proxied=False,
                 ttl=1

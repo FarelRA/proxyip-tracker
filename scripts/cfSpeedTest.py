@@ -19,23 +19,74 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Logging configuration
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+# --- Network ---
 CLOUDFLARE_HOST = "speed.cloudflare.com"
 CLOUDFLARE_PORT = 443
 TIMEOUT = 4
+READ_BUFFER = 4096
+
+# --- HTTP ---
+HEADER_TERMINATOR = b"\r\n\r\n"
+HEADER_OFFSET = 4
+EXPECTED_STATUS = 200
+HTTP_GET = "GET"
+HTTP_POST = "POST"
+
+# --- Endpoints ---
+PATH_TRACE = "/cdn-cgi/trace"
+PATH_DOWNLOAD = "/__down?bytes={}"
+PATH_UPLOAD = "/__up"
+
+# --- Speed ---
+BITS_PER_BYTE = 8
+BYTES_PER_KB = 1024
+BITS_TO_MBPS = 1_000_000
+SPEED_ROUND = 2
+MS_CONVERSION = 1000
+PING_FAIL = -1
+
+# --- Multipart ---
+BOUNDARY_PREFIX = "----WebKitFormBoundary"
+BOUNDARY_BYTES = 16
+
+# --- Threading ---
+PING_WORKERS = 20
+
+# --- CSV ---
+CSV_HEADERS = ["IP", "Ping (ms)", "Upload (Mbps)", "Download (Mbps)"]
+
+# --- Config keys ---
+CFG_SPEED = "cfSpeedTest"
+KEY_FILE_IPS = "file_ips"
+KEY_MAX_IPS = "max_ips"
+KEY_MAX_PING = "max_ping"
+KEY_TEST_SIZE = "test_size"
+KEY_MIN_DOWNLOAD = "min_download_speed"
+KEY_MIN_UPLOAD = "min_upload_speed"
+KEY_OUTPUT = "output_file"
+
+# --- Config defaults ---
+DEFAULT_MAX_IPS = 10
+DEFAULT_MAX_PING = 100
+DEFAULT_TEST_SIZE = 1024
+DEFAULT_MIN_DOWNLOAD = 5.0
+DEFAULT_MIN_UPLOAD = 2.0
+DEFAULT_OUTPUT_FILE = "ip_performance.csv"
+DEFAULT_FILE_IPS = "ips.csv"
 
 ssl_context = ssl.create_default_context()
 ssl_context.check_hostname = True
 
 _local = threading.local()
 
+
 def _run(coro):
-    """Run a coroutine in a per-thread event loop (avoids creating a new loop per call)."""
+    """Run a coroutine in a per-thread event loop."""
     try:
         loop = _local.loop
     except AttributeError:
@@ -46,14 +97,12 @@ def _run(coro):
 
 @dataclass
 class IPPerformanceMetrics:
-    """Data class to store IP performance metrics."""
     ip: str
     ping: int
     upload_speed: float
     download_speed: float
 
     def to_csv_row(self) -> List[str]:
-        """Convert metrics to CSV row format."""
         return [
             self.ip,
             str(self.ping),
@@ -63,21 +112,17 @@ class IPPerformanceMetrics:
 
 
 class CloudflareIPTester:
-    """
-    Main class for testing Cloudflare IP addresses.
-    Uses real socket-level connections through target IPs.
-    """
-    def __init__(self, config_path: str = 'config.ini'):
+    def __init__(self, config_path: str = "config.ini"):
         self.config = configparser.ConfigParser()
         self.config.read(config_path)
 
-        self.max_ips = self._get_config_int('cfSpeedTest', 'max_ips', 10)
-        self.max_ping = self._get_config_int('cfSpeedTest', 'max_ping', 100)
-        self.test_size = self._get_config_int('cfSpeedTest', 'test_size', 1024)
-        self.min_download_speed = self._get_config_float('cfSpeedTest', 'min_download_speed', 5.0)
-        self.min_upload_speed = self._get_config_float('cfSpeedTest', 'min_upload_speed', 2.0)
-        self.output_file = self._get_config_str('cfSpeedTest', 'output_file', 'ip_performance.csv')
-        self.ip_file = self._get_config_str('cfSpeedTest', 'file_ips', 'ips.csv')
+        self.max_ips = self._get_config_int(CFG_SPEED, KEY_MAX_IPS, DEFAULT_MAX_IPS)
+        self.max_ping = self._get_config_int(CFG_SPEED, KEY_MAX_PING, DEFAULT_MAX_PING)
+        self.test_size = self._get_config_int(CFG_SPEED, KEY_TEST_SIZE, DEFAULT_TEST_SIZE)
+        self.min_download_speed = self._get_config_float(CFG_SPEED, KEY_MIN_DOWNLOAD, DEFAULT_MIN_DOWNLOAD)
+        self.min_upload_speed = self._get_config_float(CFG_SPEED, KEY_MIN_UPLOAD, DEFAULT_MIN_UPLOAD)
+        self.output_file = self._get_config_str(CFG_SPEED, KEY_OUTPUT, DEFAULT_OUTPUT_FILE)
+        self.ip_file = self._get_config_str(CFG_SPEED, KEY_FILE_IPS, DEFAULT_FILE_IPS)
 
     def _get_config_int(self, section: str, key: str, default: int) -> int:
         try:
@@ -100,16 +145,8 @@ class CloudflareIPTester:
             logging.warning(f"Using default value {default} for {key}")
             return default
 
-    def _get_config_bool(self, section: str, key: str, default: bool) -> bool:
-        try:
-            return self.config.getboolean(section, key)
-        except (configparser.NoOptionError, ValueError):
-            logging.warning(f"Using default value {default} for {key}")
-            return default
-
     @staticmethod
     def read_ips(file_path: str) -> Dict[str, List[str]]:
-        """Read ips.csv and return dict of {region: [ip, ...]}."""
         try:
             region_ips: Dict[str, List[str]] = {}
             with open(file_path, 'r') as f:
@@ -126,12 +163,8 @@ class CloudflareIPTester:
         except Exception as e:
             raise FileNotFoundError(f"Error reading IP file: {e}")
 
-    async def _socket_request(self, ip: str, path: str, method: str = "GET",
+    async def _socket_request(self, ip: str, path: str, method: str = HTTP_GET,
                                body: Optional[bytes] = None) -> Tuple[int, bytes]:
-        """
-        Make an HTTP request through a specific proxy IP using raw TLS socket.
-        Returns (status_code, response_body).
-        """
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(ip, CLOUDFLARE_PORT, ssl=ssl_context,
@@ -139,13 +172,13 @@ class CloudflareIPTester:
                 timeout=TIMEOUT
             )
 
-            if method == "GET":
+            if method == HTTP_GET:
                 req = (
                     f"GET {path} HTTP/1.1\r\n"
                     f"Host: {CLOUDFLARE_HOST}\r\n"
                     f"Connection: close\r\n\r\n"
                 ).encode()
-            elif method == "POST":
+            elif method == HTTP_POST:
                 req = (
                     f"POST {path} HTTP/1.1\r\n"
                     f"Host: {CLOUDFLARE_HOST}\r\n"
@@ -161,7 +194,7 @@ class CloudflareIPTester:
 
             raw = b""
             while True:
-                chunk = await asyncio.wait_for(reader.read(4096), timeout=TIMEOUT)
+                chunk = await asyncio.wait_for(reader.read(READ_BUFFER), timeout=TIMEOUT)
                 if not chunk:
                     break
                 raw += chunk
@@ -169,8 +202,7 @@ class CloudflareIPTester:
             writer.close()
             await writer.wait_closed()
 
-            # Parse HTTP response
-            header_end = raw.find(b"\r\n\r\n")
+            header_end = raw.find(HEADER_TERMINATOR)
             if header_end == -1:
                 return 0, raw
 
@@ -182,56 +214,50 @@ class CloudflareIPTester:
                 except (IndexError, ValueError):
                     pass
 
-            body = raw[header_end + 4:]
-            return status_code, body
+            return status_code, raw[header_end + HEADER_OFFSET:]
 
         except (asyncio.TimeoutError, ConnectionRefusedError, ConnectionResetError,
                 ssl.SSLError, OSError, ValueError):
             return 0, b""
 
     def get_ping(self, ip: str) -> int:
-        """Get ping via real proxy connection by measuring RTT."""
         start = time.time()
-        status, _ = _run(self._socket_request(ip, "/cdn-cgi/trace"))
-        if status == 200:
-            rtt = int((time.time() - start) * 1000)
+        status, _ = _run(self._socket_request(ip, PATH_TRACE))
+        if status == EXPECTED_STATUS:
+            rtt = int((time.time() - start) * MS_CONVERSION)
             logging.info(f"Ping for {ip}: {rtt} ms")
             return rtt
-        return -1
+        return PING_FAIL
 
     def get_download_speed(self, ip: str) -> float:
-        """Test download speed through the proxy IP."""
-        download_size = self.test_size * 1024
-        path = f"/__down?bytes={download_size}"
+        path = PATH_DOWNLOAD.format(self.test_size * BYTES_PER_KB)
 
         start = time.time()
         status, body = _run(self._socket_request(ip, path))
-        if status != 200 or not body:
+        if status != EXPECTED_STATUS or not body:
             return 0.0
 
         elapsed = time.time() - start
         if elapsed <= 0:
             return 0.0
 
-        speed = round(len(body) * 8 / elapsed / 1_000_000, 2)
+        speed = round(len(body) * BITS_PER_BYTE / elapsed / BITS_TO_MBPS, SPEED_ROUND)
         logging.info(f"Download speed for {ip}: {speed} Mbps")
         return speed
 
     def get_upload_speed(self, ip: str) -> float:
-        """Test upload speed through the proxy IP."""
-        upload_size = int(self.test_size * 1024)
+        upload_size = int(self.test_size * BYTES_PER_KB)
         body = b"\x00" * upload_size
-        boundary = "----WebKitFormBoundary" + os.urandom(16).hex()
+        boundary = BOUNDARY_PREFIX + os.urandom(BOUNDARY_BYTES).hex()
         payload = (
             f"--{boundary}\r\n"
             f'Content-Disposition: form-data; name="file"; filename="sample.bin"\r\n'
             f"Content-Type: application/octet-stream\r\n\r\n"
         ).encode() + body + f"\r\n--{boundary}--\r\n".encode()
 
-        path = "/__up"
         start = time.time()
         status, response_body = _run(
-            self._socket_request_raw(ip, path, payload, boundary)
+            self._socket_request_raw(ip, PATH_UPLOAD, payload, boundary)
         )
         if status == 0:
             return 0.0
@@ -240,13 +266,12 @@ class CloudflareIPTester:
         if elapsed <= 0:
             return 0.0
 
-        speed = round(upload_size * 8 / elapsed / 1_000_000, 2)
+        speed = round(upload_size * BITS_PER_BYTE / elapsed / BITS_TO_MBPS, SPEED_ROUND)
         logging.info(f"Upload speed for {ip}: {speed} Mbps")
         return speed
 
     async def _socket_request_raw(self, ip: str, path: str, body: bytes,
                                     boundary: str) -> Tuple[int, bytes]:
-        """Like _socket_request but for raw POST with multipart body."""
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(ip, CLOUDFLARE_PORT, ssl=ssl_context,
@@ -267,7 +292,7 @@ class CloudflareIPTester:
 
             raw = b""
             while True:
-                chunk = await asyncio.wait_for(reader.read(4096), timeout=TIMEOUT)
+                chunk = await asyncio.wait_for(reader.read(READ_BUFFER), timeout=TIMEOUT)
                 if not chunk:
                     break
                 raw += chunk
@@ -275,7 +300,7 @@ class CloudflareIPTester:
             writer.close()
             await writer.wait_closed()
 
-            header_end = raw.find(b"\r\n\r\n")
+            header_end = raw.find(HEADER_TERMINATOR)
             if header_end == -1:
                 return 0, raw
 
@@ -287,24 +312,23 @@ class CloudflareIPTester:
                 except (IndexError, ValueError):
                     pass
 
-            return status_code, raw[header_end + 4:]
+            return status_code, raw[header_end + HEADER_OFFSET:]
 
         except (asyncio.TimeoutError, ConnectionRefusedError, ConnectionResetError,
                 ssl.SSLError, OSError, ValueError):
             return 0, b""
 
     def filter_ips_by_ping(self, ip_list: List[str]) -> List[Tuple[str, int]]:
-        """Filter IPs based on ping response using multithreading."""
         def ping_ip(ip):
             return ip, self.get_ping(ip)
 
         ip_ping_results = []
-        with ThreadPoolExecutor(max_workers=20) as executor:
+        with ThreadPoolExecutor(max_workers=PING_WORKERS) as executor:
             future_to_ip = {executor.submit(ping_ip, ip): ip for ip in ip_list}
             for future in as_completed(future_to_ip):
                 try:
                     ip, ping_time = future.result()
-                    if ping_time > 0 and ping_time <= self.max_ping:
+                    if ping_time > PING_FAIL and ping_time <= self.max_ping:
                         ip_ping_results.append((ip, ping_time))
                 except Exception as e:
                     logging.error(f"Error pinging IP {future_to_ip[future]}: {e}")
@@ -313,7 +337,6 @@ class CloudflareIPTester:
         return ip_ping_results[:self.max_ips]
 
     def run_tests(self) -> List[IPPerformanceMetrics]:
-        """Run comprehensive IP performance tests."""
         ip_region_map = self.read_ips(self.ip_file)
         if not ip_region_map:
             raise ValueError("No IPs found in CSV")
@@ -351,12 +374,11 @@ class CloudflareIPTester:
         return successful_ips
 
     def export_results(self, results: List[IPPerformanceMetrics]) -> None:
-        """Export test results to CSV."""
         try:
             os.makedirs(os.path.dirname(self.output_file) or ".", exist_ok=True)
             with open(self.output_file, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)
-                writer.writerow(['IP', 'Ping (ms)', 'Upload (Mbps)', 'Download (Mbps)'])
+                writer.writerow(CSV_HEADERS)
                 for result in results:
                     writer.writerow(result.to_csv_row())
             logging.info(f"Results exported to {self.output_file}")
@@ -365,7 +387,6 @@ class CloudflareIPTester:
 
 
 def main():
-    """Main execution function."""
     try:
         tester = CloudflareIPTester()
         results = tester.run_tests()
