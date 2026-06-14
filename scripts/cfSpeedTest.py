@@ -12,7 +12,6 @@ import ssl
 import csv
 import time
 import asyncio
-import threading
 import logging
 import configparser
 from dataclasses import dataclass
@@ -93,24 +92,21 @@ DEFAULT_PING_WORKERS = 20
 ssl_context = ssl.create_default_context()
 ssl_context.check_hostname = True
 
-# Per-thread event loop storage for asyncio coroutine execution
-_local = threading.local()
-
 
 def _run(coro):
     """
     Execute a coroutine in the current thread's event loop.
 
-    Reuses a single event loop per thread instead of creating/destroying
-    one on every call. This avoids the "attached to a different loop"
-    error when called from ThreadPoolExecutor workers.
+    Creates a fresh event loop per call and closes it immediately after
+    to avoid Python 3.14+ cleanup warnings on garbage collection.
     """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
-        loop = _local.loop
-    except AttributeError:
-        loop = asyncio.new_event_loop()
-        _local.loop = loop
-    return loop.run_until_complete(coro)
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
 
 
 @dataclass
