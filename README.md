@@ -4,15 +4,15 @@ This project automatically updates Cloudflare DNS records with the fastest proxy
 
 ## How it Works
 
-1. **Getting IPs (`scripts/getIPs.py`):** Downloads a ZIP file containing IP lists, extracts it, combines the IPs. Then saving the results to `result/ip.txt`.
+1. **Discovering Proxy IPs (`scripts/getIPs.py`):** Fetches Oracle Cloud public CIDR ranges, connects to every IP on port 443 with TLS SNI set to `speed.cloudflare.com`, and checks if the response comes from Cloudflare's edge. Scans all IPv4 and IPv6 ranges with no limits using asyncio parallelism. Results are saved to `result/ips.txt`.
 
-2. **IP Testing (`scripts/cfSpeedTest.py`):** From the `result/ip.txt`, check the regions, ping, download, and upload speed. Then save the result to `result/tested-ips.csv`.
+2. **IP Testing (`scripts/cfSpeedTest.py`):** From the `result/ips.txt`, maps IPs to regions via Cloudflare colo data, tests ping, download, and upload speed through real TLS socket connections to each proxy IP. Supports IPv4 and IPv6. Results saved to `result/tested-ips.csv`.
 
-3. **Domain IP Mapping (`scripts/mapDomain.py`):** From the `result/tested-ips.csv`. Map the IPs to the corresponding domains, then sort it by download speed. Then save the result to `result/domains-ips.csv`.
+3. **Domain IP Mapping (`scripts/mapDomain.py`):** From the `result/tested-ips.csv`, maps the best-performing IPs to domains per region, sorted by download speed. Results saved to `result/domains-ips.csv`.
 
-4. **Cloudflare Record Update (`scripts/cfRecUpdate.py`):** From `result/domains-ips.csv`. Updates specified Cloudflare DNS records with the IP addresses.  It intelligently updates existing records, creates new ones if needed, and deletes any extra records.
+4. **Cloudflare Record Update (`scripts/cfRecUpdate.py`):** From `result/domains-ips.csv`, updates Cloudflare DNS records with the IP addresses. Automatically detects IP version — creates A records for IPv4 and AAAA records for IPv6. Intelligently updates existing records, creates new ones, and deletes extras.
 
-5. **Workflow Automation:** A GitHub Actions workflow (`daily_update.yml`) schedules the entire process to run daily, every three hours.
+5. **Workflow Automation:** A GitHub Actions workflow (`daily_update.yml`) schedules the entire process to run every three hours.
 
 ## GitHub Setup
 
@@ -43,22 +43,20 @@ This project automatically updates Cloudflare DNS records with the fastest proxy
 ## Configuration Guide
 
 ### 1. **Get IPs**
-- **Purpose:** Fetch IP addresses matching a specific pattern from a URL.
+- **Purpose:** Discover Cloudflare proxy IPs within Oracle Cloud infrastructure by scanning all public CIDR ranges.
 - **Settings:**
-  - `url`: The source URL for IP files (e.g., `https://zip.baipiao.eu.org`).
-  - `file_pattern`: Pattern to match files (e.g., `*-1-443.txt`).
-  - `output_file`: Path to save the collected IPs (e.g., `result/ips.txt`).
+  - `url`: Oracle Cloud public IP ranges JSON URL (default: `https://docs.oracle.com/en-us/iaas/tools/public_ip_ranges.json`).
+  - `output_file`: Path to save the discovered proxy IPs (e.g., `result/ips.txt`).
 
 ### 2. **Cloudflare Speed Test (cfSpeedTest)**
 - **Purpose:** Test the speed and quality of IPs for download/upload performance.
 - **Settings:**
   - `file_ips`: Input file with collected IPs (e.g., `result/ips.txt`).
   - `max_ips`: Maximum number of IPs to test (e.g., 48).
-  - `max_ping`: Maximum acceptable ping (e.g., 320 ms).
-  - `test_size`: Data size for testing download/upload speeds (e.g., 5120 KB).
-  - `min_download_speed`: Minimum acceptable download speed (e.g., 20 Mbps).
-  - `min_upload_speed`: Minimum acceptable upload speed (e.g., 20 Mbps).
-  - `force_ping_fallback`: Force to use ping fallback method (http method) regardless `ping3` availability (e.g., True).
+  - `max_ping`: Maximum acceptable ping in ms (e.g., 320).
+  - `test_size`: Data size in KB for testing download/upload speeds (e.g., 10240).
+  - `min_download_speed`: Minimum acceptable download speed in Mbps (e.g., 20.0).
+  - `min_upload_speed`: Minimum acceptable upload speed in Mbps (e.g., 20.0).
   - `output_file`: File to save the test results (e.g., `result/tested-ips.csv`).
 
 ### 3. **Map Domain**
@@ -74,7 +72,7 @@ This project automatically updates Cloudflare DNS records with the fastest proxy
 
 
 ### 4. **Cloudflare Record Update (cfRecUpdate)**
-- **Purpose:** Update Cloudflare DNS records based on the mapped domains and IPs.
+- **Purpose:** Update Cloudflare DNS records based on the mapped domains and IPs. Automatically creates A records for IPv4 and AAAA records for IPv6.
 - **Settings:**
   - `input_csv`: File with domains and their corresponding IPs (e.g., `result/domains-ips.csv`).
   - `zone_id`: Cloudflare Zone ID for updates.
