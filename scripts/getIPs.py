@@ -36,7 +36,7 @@ context.check_hostname = True
 
 
 def fetch_oracle_cidrs(url: str = ORACLE_IP_RANGES_URL) -> List[str]:
-    """Fetch all public CIDR ranges from Oracle Cloud."""
+    """Fetch OCI public CIDR ranges (regions only, not oracle-services)."""
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
@@ -47,12 +47,6 @@ def fetch_oracle_cidrs(url: str = ORACLE_IP_RANGES_URL) -> List[str]:
     cidrs: Set[str] = set()
     for region in data.get("regions", []):
         for entry in region.get("cidrs", []):
-            cidr = entry.get("cidr")
-            if cidr:
-                cidrs.add(cidr)
-
-    for service in data.get("oracle-services", []):
-        for entry in service.get("cidrs", []):
             cidr = entry.get("cidr")
             if cidr:
                 cidrs.add(cidr)
