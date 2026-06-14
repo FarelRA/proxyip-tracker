@@ -271,6 +271,7 @@ class CloudflareIPTester:
             f"Content-Type: application/octet-stream\r\n\r\n"
         ).encode() + body + f"\r\n--{boundary}--\r\n".encode()
 
+        path = "/__up"
         start = time.time()
         status, response_body = _run(
             self._socket_request_raw(ip, path, payload, boundary)
