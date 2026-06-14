@@ -195,7 +195,7 @@ def get_record_type(ip: str) -> str:
 def main():
     # Load configuration
     config = load_config()
-    input_csv = config.get('cfRecUpdate', 'input_csv')
+    input_csv = config.get('cfRecUpdate', 'file_domains')
     zone_id = config.get('cfRecUpdate', 'zone_id')
     api_token = os.getenv('CLOUDFLARE_API_TOKEN')
 

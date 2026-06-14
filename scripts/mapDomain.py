@@ -9,10 +9,10 @@ def filter_ips():
 
     ip_csv = config.get('mapDomain', 'file_ips')
     input_csv = config.get('mapDomain', 'file_tests')
-    output_csv = config.get('mapDomain', 'output_csv')
+    output_file = config.get('mapDomain', 'output_file')
     print(f"IP CSV path: {ip_csv}")
     print(f"Input CSV path: {input_csv}")
-    print(f"Output CSV path: {output_csv}")
+    print(f"Output file path: {output_file}")
 
     # Load domain mapping and max IPs per domain (case-insensitive)
     print("Loading domain mapping and max IP limits...")
@@ -75,12 +75,12 @@ def filter_ips():
 
     # Write to output CSV
     print("Writing data to output CSV...")
-    os.makedirs(os.path.dirname(output_csv) or ".", exist_ok=True)
-    with open(output_csv, 'w', newline='') as outfile:
+    os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
+    with open(output_file, 'w', newline='') as outfile:
         writer = csv.DictWriter(outfile, fieldnames=['Domain', 'IP'])
         writer.writeheader()
         writer.writerows(final_data)
-    print(f"Output successfully written to {output_csv}")
+    print(f"Output successfully written to {output_file}")
 
 if __name__ == '__main__':
     print("Starting IP filtering process...")
