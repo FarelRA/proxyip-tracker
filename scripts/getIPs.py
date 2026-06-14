@@ -28,13 +28,40 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-ORACLE_IP_RANGES_URL = "https://docs.oracle.com/en-us/iaas/tools/public_ip_ranges.json"
+# --- Network ---
 CLOUDFLARE_HOST = "speed.cloudflare.com"
 CLOUDFLARE_PORT = 443
 TIMEOUT = 1
 MAX_CONCURRENT = 2000
 PROGRESS_INTERVAL = 50000
+READ_BUFFER = 4096
+
+# --- HTTP ---
+HEADER_TERMINATOR = b"\r\n\r\n"
+HEADER_OFFSET = 4
+
+# --- URLs ---
+ORACLE_IP_RANGES_URL = "https://docs.oracle.com/en-us/iaas/tools/public_ip_ranges.json"
 COLO_CSV_URL = "https://raw.githubusercontent.com/Netrvin/cloudflare-colo-list/refs/heads/main/DC-Colos.csv"
+
+# --- Timeouts ---
+FETCH_CIDRS_TIMEOUT = 30
+FETCH_COLO_TIMEOUT = 4
+
+# --- Trace parsing ---
+COLO_PREFIX = "colo="
+REGION_UNKNOWN = "Unknown"
+REGION_SPACE_REPLACE = "_"
+
+# --- CSV ---
+CSV_HEADERS = ["IP", "Colo", "Region"]
+
+# --- Config keys ---
+KEY_URL = "url"
+KEY_OUTPUT_FILE = "output_file"
+
+# --- Defaults ---
+DEFAULT_OUTPUT_FILE = "result/ips.csv"
 
 context = ssl.create_default_context()
 context.check_hostname = True
@@ -43,7 +70,7 @@ context.check_hostname = True
 def fetch_oracle_cidrs(url: str = ORACLE_IP_RANGES_URL) -> List[str]:
     """Fetch OCI CIDR ranges (only CIDRs tagged 'OCI')."""
     try:
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, timeout=FETCH_CIDRS_TIMEOUT)
         response.raise_for_status()
         data = response.json()
     except Exception as e:
@@ -64,7 +91,7 @@ def fetch_oracle_cidrs(url: str = ORACLE_IP_RANGES_URL) -> List[str]:
 def fetch_cloudflare_colo_data() -> List[Dict[str, str]]:
     """Fetch Cloudflare colo data from a remote CSV."""
     try:
-        response = requests.get(COLO_CSV_URL, timeout=4)
+        response = requests.get(COLO_CSV_URL, timeout=FETCH_COLO_TIMEOUT)
         response.raise_for_status()
         return list(csv.DictReader(StringIO(response.text)))
     except requests.RequestException as e:
@@ -76,8 +103,8 @@ def get_region_from_colo(colo: str, colo_data: List[Dict[str, str]]) -> str:
     """Find region for a given colo code."""
     for row in colo_data:
         if row.get('colo') == colo:
-            return row.get('region', 'Unknown').replace(" ", "_")
-    return "Unknown"
+            return row.get('region', REGION_UNKNOWN).replace(" ", REGION_SPACE_REPLACE)
+    return REGION_UNKNOWN
 
 
 async def scan_proxy(ip: str) -> Optional[str]:
@@ -101,7 +128,7 @@ async def scan_proxy(ip: str) -> Optional[str]:
 
         data = b""
         while True:
-            chunk = await asyncio.wait_for(reader.read(4096), timeout=TIMEOUT)
+            chunk = await asyncio.wait_for(reader.read(READ_BUFFER), timeout=TIMEOUT)
             if not chunk:
                 break
             data += chunk
@@ -109,12 +136,12 @@ async def scan_proxy(ip: str) -> Optional[str]:
         writer.close()
         await writer.wait_closed()
 
-        header_end = data.find(b"\r\n\r\n")
+        header_end = data.find(HEADER_TERMINATOR)
         if header_end == -1:
             return None
-        body = data[header_end + 4:]
+        body = data[header_end + HEADER_OFFSET:]
         for line in body.decode(errors='replace').splitlines():
-            if line.startswith("colo="):
+            if line.startswith(COLO_PREFIX):
                 return line.split("=")[1]
         return None
 
@@ -181,8 +208,8 @@ def main():
     config = configparser.ConfigParser()
     config.read("config.ini")
 
-    oracle_url = config.get('getIPs', 'url', fallback=ORACLE_IP_RANGES_URL)
-    output_file = config.get('getIPs', 'output_file', fallback='result/ips.csv')
+    oracle_url = config.get('getIPs', KEY_URL, fallback=ORACLE_IP_RANGES_URL)
+    output_file = config.get('getIPs', KEY_OUTPUT_FILE, fallback=DEFAULT_OUTPUT_FILE)
 
     logging.info(f"Fetching Cloudflare colo data from {COLO_CSV_URL}")
     colo_data = fetch_cloudflare_colo_data()
@@ -199,7 +226,7 @@ def main():
     os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
     with open(output_file, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['IP', 'Colo', 'Region'])
+        writer.writerow(CSV_HEADERS)
         writer.writerows(results)
     logging.info(f"Saved {len(results)} IPs to {output_file}")
 
