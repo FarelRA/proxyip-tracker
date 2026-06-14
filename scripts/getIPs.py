@@ -8,15 +8,18 @@ Discovers Cloudflare proxy IPs within Oracle Cloud infrastructure by:
 3. Checking if the response comes from Cloudflare's edge
 
 Scans ALL IPs in every CIDR range with no limits, using asyncio for maximum parallelism.
+Outputs a CSV with IP, colo code, and region name.
 """
 
 import asyncio
+import csv
 import os
 import ssl
 import logging
 import configparser
 import ipaddress
-from typing import List, Set
+from io import StringIO
+from typing import List, Dict, Set, Tuple, Optional
 
 import requests
 
@@ -31,6 +34,7 @@ CLOUDFLARE_PORT = 443
 TIMEOUT = 1
 MAX_CONCURRENT = 2000
 PROGRESS_INTERVAL = 50000
+COLO_CSV_URL = "https://raw.githubusercontent.com/Netrvin/cloudflare-colo-list/refs/heads/main/DC-Colos.csv"
 
 context = ssl.create_default_context()
 context.check_hostname = True
@@ -57,10 +61,29 @@ def fetch_oracle_cidrs(url: str = ORACLE_IP_RANGES_URL) -> List[str]:
     return sorted(cidrs)
 
 
-async def scan_proxy(ip: str) -> bool:
+def fetch_cloudflare_colo_data() -> List[Dict[str, str]]:
+    """Fetch Cloudflare colo data from a remote CSV."""
+    try:
+        response = requests.get(COLO_CSV_URL, timeout=4)
+        response.raise_for_status()
+        return list(csv.DictReader(StringIO(response.text)))
+    except requests.RequestException as e:
+        logging.error(f"Error fetching Cloudflare colo data: {e}")
+        return []
+
+
+def get_region_from_colo(colo: str, colo_data: List[Dict[str, str]]) -> str:
+    """Find region for a given colo code."""
+    for row in colo_data:
+        if row.get('colo') == colo:
+            return row.get('region', 'Unknown').replace(" ", "_")
+    return "Unknown"
+
+
+async def scan_proxy(ip: str) -> Optional[str]:
     """
     Connect to IP:443 with TLS SNI=CLOUDFLARE_HOST, send /cdn-cgi/trace,
-    check if response contains 'colo=' (Cloudflare proxy indicator).
+    return colo code if Cloudflare proxy, else None.
     """
     try:
         reader, writer = await asyncio.wait_for(
@@ -86,28 +109,37 @@ async def scan_proxy(ip: str) -> bool:
         writer.close()
         await writer.wait_closed()
 
-        return b"colo=" in data
+        header_end = data.find(b"\r\n\r\n")
+        if header_end == -1:
+            return None
+        body = data[header_end + 4:]
+        for line in body.decode(errors='replace').splitlines():
+            if line.startswith("colo="):
+                return line.split("=")[1]
+        return None
 
     except (asyncio.TimeoutError, ConnectionRefusedError, ConnectionResetError,
             ssl.SSLError, OSError, ValueError):
-        return False
+        return None
 
 
-async def scan_all(cidrs: List[str]) -> List[str]:
+async def scan_all(cidrs: List[str], colo_data: List[Dict[str, str]]) -> List[Tuple[str, str, str]]:
     """
     Scan ALL IPs in all CIDRs using asyncio with a semaphore cap.
-    Every IP competes fairly for a concurrency slot — no CIDR monopolizes.
+    Returns list of (ip, colo, region) tuples.
     """
     sem = asyncio.Semaphore(MAX_CONCURRENT)
-    results: List[str] = []
+    results: List[Tuple[str, str, str]] = []
     scanned = 0
     active_tasks: Set[asyncio.Task] = set()
 
     async def scan_one(ip_str: str) -> None:
         nonlocal scanned
         try:
-            if await scan_proxy(ip_str):
-                results.append(ip_str)
+            colo = await scan_proxy(ip_str)
+            if colo:
+                region = get_region_from_colo(colo, colo_data)
+                results.append((ip_str, colo, region))
         finally:
             sem.release()
             scanned += 1
@@ -138,7 +170,6 @@ async def scan_all(cidrs: List[str]) -> List[str]:
             active_tasks.add(task)
             task.add_done_callback(active_tasks.discard)
 
-    # Wait for remaining in-flight tasks
     if active_tasks:
         await asyncio.wait(active_tasks)
 
@@ -151,19 +182,26 @@ def main():
     config.read("config.ini")
 
     oracle_url = config.get('getIPs', 'url', fallback=ORACLE_IP_RANGES_URL)
-    output_file = config.get('getIPs', 'output_file', fallback='result/ips.txt')
+    output_file = config.get('getIPs', 'output_file', fallback='result/ips.csv')
+
+    logging.info(f"Fetching Cloudflare colo data from {COLO_CSV_URL}")
+    colo_data = fetch_cloudflare_colo_data()
+    if not colo_data:
+        raise RuntimeError("Failed to fetch Cloudflare colo data.")
 
     logging.info(f"Fetching Oracle Cloud IP ranges from {oracle_url}")
     cidrs = fetch_oracle_cidrs(oracle_url)
     logging.info(f"Found {len(cidrs)} CIDR ranges")
 
-    proxy_ips = asyncio.run(scan_all(cidrs))
-    proxy_ips.sort()
+    results = asyncio.run(scan_all(cidrs, colo_data))
+    results.sort(key=lambda x: x[0])
 
     os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
-    with open(output_file, 'w') as f:
-        f.write("\n".join(proxy_ips) + ("\n" if proxy_ips else ""))
-    logging.info(f"Saved {len(proxy_ips)} IPs to {output_file}")
+    with open(output_file, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['IP', 'Colo', 'Region'])
+        writer.writerows(results)
+    logging.info(f"Saved {len(results)} IPs to {output_file}")
 
 
 if __name__ == "__main__":

@@ -15,14 +15,10 @@ import random
 import asyncio
 import threading
 import logging
-import ipaddress
 import configparser
-from io import StringIO
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-import requests
 
 # Logging configuration
 logging.basicConfig(
@@ -53,7 +49,6 @@ def _run(coro):
 class IPPerformanceMetrics:
     """Data class to store IP performance metrics."""
     ip: str
-    region: str
     ping: int
     upload_speed: float
     download_speed: float
@@ -62,7 +57,6 @@ class IPPerformanceMetrics:
         """Convert metrics to CSV row format."""
         return [
             self.ip,
-            self.region,
             str(self.ping),
             f"{self.upload_speed:.2f}",
             f"{self.download_speed:.2f}"
@@ -84,7 +78,7 @@ class CloudflareIPTester:
         self.min_download_speed = self._get_config_float('cfSpeedTest', 'min_download_speed', 5.0)
         self.min_upload_speed = self._get_config_float('cfSpeedTest', 'min_upload_speed', 2.0)
         self.output_file = self._get_config_str('cfSpeedTest', 'output_file', 'ip_performance.csv')
-        self.ip_file = self._get_config_str('cfSpeedTest', 'file_ips', 'ips.txt')
+        self.ip_file = self._get_config_str('cfSpeedTest', 'file_ips', 'ips.csv')
 
     def _get_config_int(self, section: str, key: str, default: int) -> int:
         try:
@@ -115,42 +109,23 @@ class CloudflareIPTester:
             return default
 
     @staticmethod
-    def read_ips(file_path: str) -> List[str]:
-        """Read and validate IP addresses (IPv4 and IPv6) from a file."""
+    def read_ips(file_path: str) -> Dict[str, List[str]]:
+        """Read ips.csv and return dict of {region: [ip, ...]}."""
         try:
-            with open(file_path, 'r') as file:
-                ips = [
-                    ip.strip() for ip in file
-                    if ip.strip() and CloudflareIPTester.validate_ip(ip.strip())
-                ]
-            if not ips:
-                raise ValueError("No valid IP addresses found in the file")
-            return ips
+            region_ips: Dict[str, List[str]] = {}
+            with open(file_path, 'r') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    region = row['Region'].strip()
+                    ip = row['IP'].strip()
+                    region_ips.setdefault(region, []).append(ip)
+            if not region_ips:
+                raise ValueError("No IP addresses found in the CSV")
+            return region_ips
         except FileNotFoundError:
             raise FileNotFoundError(f"IP file not found: {file_path}")
         except Exception as e:
             raise FileNotFoundError(f"Error reading IP file: {e}")
-
-    @staticmethod
-    def validate_ip(ip: str) -> bool:
-        """Validate an IP address (supports IPv4 and IPv6)."""
-        try:
-            ipaddress.ip_address(ip)
-            return True
-        except ValueError:
-            logging.warning(f"Invalid IP address: {ip}")
-            return False
-
-    def fetch_cloudflare_colo_data(self) -> List[Dict[str, str]]:
-        """Fetch Cloudflare colo data from a remote CSV."""
-        try:
-            csv_url = "https://raw.githubusercontent.com/Netrvin/cloudflare-colo-list/refs/heads/main/DC-Colos.csv"
-            response = requests.get(csv_url, timeout=4)
-            response.raise_for_status()
-            return list(csv.DictReader(StringIO(response.text)))
-        except requests.RequestException as e:
-            logging.error(f"Error fetching Cloudflare colo data: {e}")
-            return []
 
     async def _socket_request(self, ip: str, path: str, method: str = "GET",
                                body: Optional[bytes] = None) -> Tuple[int, bytes]:
@@ -214,23 +189,6 @@ class CloudflareIPTester:
         except (asyncio.TimeoutError, ConnectionRefusedError, ConnectionResetError,
                 ssl.SSLError, OSError, ValueError):
             return 0, b""
-
-    def get_colo_from_ip(self, ip: str) -> Optional[str]:
-        """Fetch the colo code for a given IP via real proxy connection."""
-        status, body = _run(self._socket_request(ip, "/cdn-cgi/trace"))
-        if status != 200:
-            return None
-        for line in body.decode(errors='replace').splitlines():
-            if line.startswith("colo="):
-                return line.split("=")[1]
-        return None
-
-    def get_region_from_colo(self, colo: str, colo_data: List[Dict[str, str]]) -> str:
-        """Find region for a given colo code."""
-        for row in colo_data:
-            if row.get('colo') == colo:
-                return row.get('region', 'Unknown').replace(" ", "_")
-        return "Unknown"
 
     def get_ping(self, ip: str) -> int:
         """Get ping via real proxy connection by measuring RTT."""
@@ -336,35 +294,6 @@ class CloudflareIPTester:
                 ssl.SSLError, OSError, ValueError):
             return 0, b""
 
-    def map_ips_to_regions(self, ip_list: List[str]) -> Dict[str, List[str]]:
-        """Map IPs to their corresponding regions using multithreading."""
-        logging.info("Fetching Cloudflare colo data.")
-        colo_data = self.fetch_cloudflare_colo_data()
-        if not colo_data:
-            raise RuntimeError("Critical error: Failed to fetch Cloudflare colo data.")
-
-        region_ip_map = {}
-
-        def process_ip(ip):
-            colo = self.get_colo_from_ip(ip)
-            if not colo:
-                return None, None
-            region = self.get_region_from_colo(colo, colo_data)
-            logging.info(f"IP: {ip}; Colo: {colo}; Region: {region}")
-            return region, ip
-
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            future_to_ip = {executor.submit(process_ip, ip): ip for ip in ip_list}
-            for future in as_completed(future_to_ip):
-                try:
-                    region, ip = future.result()
-                    if region and ip:
-                        region_ip_map.setdefault(region, []).append(ip)
-                except Exception as e:
-                    logging.error(f"Error processing IP {future_to_ip[future]}: {e}")
-
-        return region_ip_map
-
     def filter_ips_by_ping(self, ip_list: List[str]) -> List[Tuple[str, int]]:
         """Filter IPs based on ping response using multithreading."""
         def ping_ip(ip):
@@ -386,19 +315,13 @@ class CloudflareIPTester:
 
     def run_tests(self) -> List[IPPerformanceMetrics]:
         """Run comprehensive IP performance tests."""
-        try:
-            ip_list = self.read_ips(self.ip_file)
-            random.shuffle(ip_list)
-        except Exception as e:
-            raise ValueError(f"Failed to read 'ip_list': {e}")
-
-        logging.info("Getting region for each IPs.")
-        ip_region_map = self.map_ips_to_regions(ip_list)
+        ip_region_map = self.read_ips(self.ip_file)
         if not ip_region_map:
-            raise RuntimeError("Can not get regions of IPs")
+            raise ValueError("No IPs found in CSV")
 
         successful_ips: List[IPPerformanceMetrics] = []
         for region, ips in ip_region_map.items():
+            random.shuffle(ips)
             logging.info(f"Starting ping tests to filter IPs in region {region}.")
             filtered_ip = self.filter_ips_by_ping(ips)
             if not filtered_ip:
@@ -420,7 +343,6 @@ class CloudflareIPTester:
 
                     successful_ips.append(IPPerformanceMetrics(
                         ip=ip,
-                        region=region,
                         ping=ping,
                         upload_speed=upload_speed,
                         download_speed=download_speed
@@ -436,7 +358,7 @@ class CloudflareIPTester:
             os.makedirs(os.path.dirname(self.output_file) or ".", exist_ok=True)
             with open(self.output_file, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)
-                writer.writerow(['IP', 'Region', 'Ping (ms)', 'Upload (Mbps)', 'Download (Mbps)'])
+                writer.writerow(['IP', 'Ping (ms)', 'Upload (Mbps)', 'Download (Mbps)'])
                 for result in results:
                     writer.writerow(result.to_csv_row())
             logging.info(f"Results exported to {self.output_file}")
