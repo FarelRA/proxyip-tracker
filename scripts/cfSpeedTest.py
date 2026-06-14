@@ -2,16 +2,17 @@
 """
 Cloudflare IP Performance Tester
 
-This script tests Cloudflare IP addresses for performance metrics
+Tests Cloudflare proxy IP addresses for performance metrics
 including ping, upload, and download speeds across different regions.
+Uses socket-level connections for real proxy testing (IPv4 and IPv6).
 """
 
 import os
-import csv
 import ssl
+import csv
 import time
 import random
-import typing
+import asyncio
 import logging
 import ipaddress
 import configparser
@@ -28,19 +29,17 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Optional dependencies with graceful fallback
-try:
-    import ping3
-    PING_AVAILABLE = True
-except ImportError:
-    PING_AVAILABLE = False
-    logging.warning("ping3 module not found. Ping functionality will be limited.")
+CLOUDFLARE_HOST = "speed.cloudflare.com"
+CLOUDFLARE_PORT = 443
+TIMEOUT = 4
+
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = True
+
 
 @dataclass
 class IPPerformanceMetrics:
-    """
-    Data class to store IP performance metrics.
-    """
+    """Data class to store IP performance metrics."""
     ip: str
     region: str
     ping: int
@@ -57,20 +56,16 @@ class IPPerformanceMetrics:
             f"{self.download_speed:.2f}"
         ]
 
+
 class CloudflareIPTester:
     """
     Main class for testing Cloudflare IP addresses.
+    Uses real socket-level connections through target IPs.
     """
     def __init__(self, config_path: str = 'config.ini'):
-        """
-        Initialize the tester with configuration settings.
-
-        :param config_path: Path to the configuration file
-        """
         self.config = configparser.ConfigParser()
         self.config.read(config_path)
 
-        # Configuration parsing with type conversion and validation
         self.max_ips = self._get_config_int('cfSpeedTest', 'max_ips', 10)
         self.max_ping = self._get_config_int('cfSpeedTest', 'max_ping', 100)
         self.test_size = self._get_config_int('cfSpeedTest', 'test_size', 1024)
@@ -78,13 +73,8 @@ class CloudflareIPTester:
         self.min_upload_speed = self._get_config_float('cfSpeedTest', 'min_upload_speed', 2.0)
         self.output_file = self._get_config_str('cfSpeedTest', 'output_file', 'ip_performance.csv')
         self.ip_file = self._get_config_str('cfSpeedTest', 'file_ips', 'ips.txt')
-        self.force_ping_fallback = self._get_config_bool('cfSpeedTest', 'force_ping_fallback', False)
-
-        # Check OpenSSL availability
-        self.openssl_available = bool(ssl.OPENSSL_VERSION)
 
     def _get_config_int(self, section: str, key: str, default: int) -> int:
-        """Safely get integer configuration value."""
         try:
             return self.config.getint(section, key)
         except (configparser.NoOptionError, ValueError):
@@ -92,7 +82,6 @@ class CloudflareIPTester:
             return default
 
     def _get_config_float(self, section: str, key: str, default: float) -> float:
-        """Safely get float configuration value."""
         try:
             return self.config.getfloat(section, key)
         except (configparser.NoOptionError, ValueError):
@@ -100,7 +89,6 @@ class CloudflareIPTester:
             return default
 
     def _get_config_str(self, section: str, key: str, default: str) -> str:
-        """Safely get string configuration value."""
         try:
             return self.config.get(section, key)
         except configparser.NoOptionError:
@@ -108,7 +96,6 @@ class CloudflareIPTester:
             return default
 
     def _get_config_bool(self, section: str, key: str, default: bool) -> bool:
-        """Safely get boolean configuration value."""
         try:
             return self.config.getboolean(section, key)
         except (configparser.NoOptionError, ValueError):
@@ -117,22 +104,15 @@ class CloudflareIPTester:
 
     @staticmethod
     def read_ips(file_path: str) -> List[str]:
-        """
-        Read and validate IP addresses from a file.
-
-        :param file_path: Path to the file containing IP addresses
-        :return: List of valid IP addresses
-        """
+        """Read and validate IP addresses (IPv4 and IPv6) from a file."""
         try:
             with open(file_path, 'r') as file:
                 ips = [
                     ip.strip() for ip in file
                     if ip.strip() and CloudflareIPTester.validate_ip(ip.strip())
                 ]
-
             if not ips:
                 raise ValueError("No valid IP addresses found in the file")
-
             return ips
         except FileNotFoundError:
             raise FileNotFoundError(f"IP file not found: {file_path}")
@@ -141,12 +121,7 @@ class CloudflareIPTester:
 
     @staticmethod
     def validate_ip(ip: str) -> bool:
-        """
-        Validate an IP address.
-
-        :param ip: IP address to validate
-        :return: True if valid, False otherwise
-        """
+        """Validate an IP address (supports IPv4 and IPv6)."""
         try:
             ipaddress.ip_address(ip)
             return True
@@ -155,173 +130,201 @@ class CloudflareIPTester:
             return False
 
     def fetch_cloudflare_colo_data(self) -> List[Dict[str, str]]:
-        """
-        Fetch Cloudflare colo data from a remote CSV.
-
-        :return: List of colo data dictionaries
-        """
+        """Fetch Cloudflare colo data from a remote CSV."""
         try:
             csv_url = "https://raw.githubusercontent.com/Netrvin/cloudflare-colo-list/refs/heads/main/DC-Colos.csv"
             response = requests.get(csv_url, timeout=4)
             response.raise_for_status()
-
             return list(csv.DictReader(StringIO(response.text)))
         except requests.RequestException as e:
             logging.error(f"Error fetching Cloudflare colo data: {e}")
             return []
 
-    def get_colo_from_ip(self, ip: str) -> Optional[str]:
+    async def _socket_request(self, ip: str, path: str, method: str = "GET",
+                               body: Optional[bytes] = None) -> Tuple[int, bytes]:
         """
-        Fetch the colo code for a given IP address.
-
-        :param ip: IP address to check
-        :return: Colo code or None
+        Make an HTTP request through a specific proxy IP using raw TLS socket.
+        Returns (status_code, response_body).
         """
         try:
-            url = f"https://speed.cloudflare.com/cdn-cgi/trace"
-            headers = {'Host': 'speed.cloudflare.com'}
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(ip, CLOUDFLARE_PORT, ssl=ssl_context,
+                                        server_hostname=CLOUDFLARE_HOST),
+                timeout=TIMEOUT
+            )
 
-            params = {
-                'resolve': f"speed.cloudflare.com:443:{ip}",
-                **({"alpn": "h2,http/1.1", "utls": "random"} if self.openssl_available else {})
-            }
+            if method == "GET":
+                req = (
+                    f"GET {path} HTTP/1.1\r\n"
+                    f"Host: {CLOUDFLARE_HOST}\r\n"
+                    f"Connection: close\r\n\r\n"
+                ).encode()
+            elif method == "POST":
+                req = (
+                    f"POST {path} HTTP/1.1\r\n"
+                    f"Host: {CLOUDFLARE_HOST}\r\n"
+                    f"Content-Type: multipart/form-data\r\n"
+                    f"Content-Length: {len(body) if body else 0}\r\n"
+                    f"Connection: close\r\n\r\n"
+                ).encode()
+                if body:
+                    req += body
 
-            response = requests.get(url, headers=headers, params=params, timeout=4)
-            response.raise_for_status()
+            writer.write(req)
+            await writer.drain()
 
-            for line in response.text.splitlines():
-                if line.startswith("colo="):
-                    return line.split("=")[1]
-        except requests.RequestException as e:
-            logging.error(f"Error fetching colo for IP {ip}: {e}")
+            raw = b""
+            while True:
+                chunk = await asyncio.wait_for(reader.read(4096), timeout=TIMEOUT)
+                if not chunk:
+                    break
+                raw += chunk
 
+            writer.close()
+            await writer.wait_closed()
+
+            # Parse HTTP response
+            header_end = raw.find(b"\r\n\r\n")
+            if header_end == -1:
+                return 0, raw
+
+            status_line = raw[:raw.find(b"\r\n")].decode(errors='replace')
+            status_code = 0
+            if status_line.startswith("HTTP/"):
+                try:
+                    status_code = int(status_line.split(" ")[1])
+                except (IndexError, ValueError):
+                    pass
+
+            body = raw[header_end + 4:]
+            return status_code, body
+
+        except (asyncio.TimeoutError, ConnectionRefusedError, ConnectionResetError,
+                ssl.SSLError, OSError, ValueError):
+            return 0, b""
+
+    def get_colo_from_ip(self, ip: str) -> Optional[str]:
+        """Fetch the colo code for a given IP via real proxy connection."""
+        status, body = asyncio.run(self._socket_request(ip, "/cdn-cgi/trace"))
+        if status != 200:
+            return None
+        for line in body.decode(errors='replace').splitlines():
+            if line.startswith("colo="):
+                return line.split("=")[1]
         return None
 
     def get_region_from_colo(self, colo: str, colo_data: List[Dict[str, str]]) -> str:
-        """
-        Find region for a given colo code.
-
-        :param colo: Colo code
-        :param colo_data: List of colo data
-        :return: Region name
-        """
+        """Find region for a given colo code."""
         for row in colo_data:
             if row.get('colo') == colo:
                 return row.get('region', 'Unknown').replace(" ", "_")
         return "Unknown"
 
     def get_ping(self, ip: str) -> int:
-        """
-        Get ping for an IP address.
-
-        :param ip: IP address to ping
-        :return: Ping time in milliseconds
-        """
-        try:
-            start_time = time.time()
-            response_time = ping3.ping(ip, timeout=self.max_ping/1000)
-
-            if response_time is not None and response_time > 0:
-                logging.info(f"Ping time for IP {ip}: {int(response_time * 1000)} ms")
-                return int(response_time * 1000)
-
-            logging.info(f"Ping time for IP {ip}: {(time.time() - start_time) * 1000} ms")
-            return int((time.time() - start_time) * 1000)
-        except Exception as e:
-            logging.error(f"Ping failed for {ip}: {e}")
-            return -1
-
-    def get_ping_fallback(self, ip: str) -> int:
-        """
-        Get ping for an IP address. Fallback method using requests.
-
-        :param ip: IP address to ping
-        :return: Ping time in milliseconds
-        """
-        url = "https://cp.cloudflare.com/generate_204"
-        headers = {'Host': 'cp.cloudflare.com'}
-
-        params = {
-            'resolve': f"cp.cloudflare.com:443:{ip}",
-            **({"alpn": "h2,http/1.1", "utls": "random"} if self.openssl_available else {})
-        }
-
-        try:
-            start_time = time.time()
-            response = requests.get(url, headers=headers, params=params, timeout=self.max_ping/1000)
-            end_time = time.time()
-
-            rtt = int((end_time - start_time) * 1000)  # Convert to milliseconds
-            logging.info(f"HTTP-based ping for IP {ip}: {rtt} ms")
+        """Get ping via real proxy connection by measuring RTT."""
+        start = time.time()
+        status, _ = asyncio.run(self._socket_request(ip, "/cdn-cgi/trace"))
+        if status == 200:
+            rtt = int((time.time() - start) * 1000)
+            logging.info(f"Ping for {ip}: {rtt} ms")
             return rtt
-        except requests.RequestException as e:
-            logging.error(f"HTTP-based ping failed for IP {ip}: {e}")
-            return -1
+        return -1
 
     def get_download_speed(self, ip: str) -> float:
-        """
-        Test download speed for an IP.
-
-        :param ip: IP address to test
-        :return: Download speed in Mbps
-        """
+        """Test download speed through the proxy IP."""
         download_size = self.test_size * 1024
-        url = f"https://speed.cloudflare.com/__down?bytes={download_size}"
-        headers = {'Host': 'speed.cloudflare.com'}
+        path = f"/__down?bytes={download_size}"
 
-        params = {
-            'resolve': f"speed.cloudflare.com:443:{ip}",
-            **({"alpn": "h2,http/1.1", "utls": "random"} if self.openssl_available else {})
-        }
-
-        try:
-            start_time = time.time()
-            response = requests.get(url, headers=headers, params=params, timeout=1)
-            download_time = time.time() - start_time
-
-            logging.info(f"Download speed: {round(download_size / download_time * 8 / 1_000_000, 2)} Mbps")
-            return round(download_size / download_time * 8 / 1_000_000, 2)
-        except requests.RequestException:
+        start = time.time()
+        status, body = asyncio.run(self._socket_request(ip, path))
+        if status != 200 or not body:
             return 0.0
+
+        elapsed = time.time() - start
+        if elapsed <= 0:
+            return 0.0
+
+        speed = round(len(body) * 8 / elapsed / 1_000_000, 2)
+        logging.info(f"Download speed for {ip}: {speed} Mbps")
+        return speed
 
     def get_upload_speed(self, ip: str) -> float:
-        """
-        Test upload speed for an IP.
-
-        :param ip: IP address to test
-        :return: Upload speed in Mbps
-        """
+        """Test upload speed through the proxy IP."""
         upload_size = int(self.test_size * 1024)
-        url = 'https://speed.cloudflare.com/__up'
-        headers = {
-            'Content-Type': 'multipart/form-data',
-            'Host': 'speed.cloudflare.com'
-        }
+        body = b"\x00" * upload_size
+        boundary = "----WebKitFormBoundary" + os.urandom(16).hex()
+        payload = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="sample.bin"\r\n'
+            f"Content-Type: application/octet-stream\r\n\r\n"
+        ).encode() + body + f"\r\n--{boundary}--\r\n".encode()
 
-        params = {
-            'resolve': f"speed.cloudflare.com:443:{ip}",
-            **({"alpn": "h2,http/1.1", "utls": "random"} if self.openssl_available else {})
-        }
-
-        files = {'file': ('sample.bin', b"\x00" * upload_size)}
-
-        try:
-            start_time = time.time()
-            requests.post(url, headers=headers, params=params, files=files, timeout=1)
-            upload_time = time.time() - start_time
-
-            logging.info(f"Upload speed: {round(upload_size / upload_time * 8 / 1_000_000, 2)} Mbps")
-            return round(upload_size / upload_time * 8 / 1_000_000, 2)
-        except requests.RequestException:
+        start = time.time()
+        status, response_body = asyncio.run(
+            self._socket_request_raw(ip, path, payload, boundary)
+        )
+        if status == 0:
             return 0.0
 
-    def map_ips_to_regions(self, ip_list: List[str]) -> Dict[str, List[str]]:
-        """
-        Map IPs to their corresponding regions using multithreading.
+        elapsed = time.time() - start
+        if elapsed <= 0:
+            return 0.0
 
-        :param ip_list: List of IP addresses
-        :return: Dictionary mapping regions to IPs
-        """
+        speed = round(upload_size * 8 / elapsed / 1_000_000, 2)
+        logging.info(f"Upload speed for {ip}: {speed} Mbps")
+        return speed
+
+    async def _socket_request_raw(self, ip: str, path: str, body: bytes,
+                                    boundary: str) -> Tuple[int, bytes]:
+        """Like _socket_request but for raw POST with multipart body."""
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(ip, CLOUDFLARE_PORT, ssl=ssl_context,
+                                        server_hostname=CLOUDFLARE_HOST),
+                timeout=TIMEOUT
+            )
+
+            req = (
+                f"POST {path} HTTP/1.1\r\n"
+                f"Host: {CLOUDFLARE_HOST}\r\n"
+                f"Content-Type: multipart/form-data; boundary={boundary}\r\n"
+                f"Content-Length: {len(body)}\r\n"
+                f"Connection: close\r\n\r\n"
+            ).encode() + body
+
+            writer.write(req)
+            await writer.drain()
+
+            raw = b""
+            while True:
+                chunk = await asyncio.wait_for(reader.read(4096), timeout=TIMEOUT)
+                if not chunk:
+                    break
+                raw += chunk
+
+            writer.close()
+            await writer.wait_closed()
+
+            header_end = raw.find(b"\r\n\r\n")
+            if header_end == -1:
+                return 0, raw
+
+            status_line = raw[:raw.find(b"\r\n")].decode(errors='replace')
+            status_code = 0
+            if status_line.startswith("HTTP/"):
+                try:
+                    status_code = int(status_line.split(" ")[1])
+                except (IndexError, ValueError):
+                    pass
+
+            return status_code, raw[header_end + 4:]
+
+        except (asyncio.TimeoutError, ConnectionRefusedError, ConnectionResetError,
+                ssl.SSLError, OSError, ValueError):
+            return 0, b""
+
+    def map_ips_to_regions(self, ip_list: List[str]) -> Dict[str, List[str]]:
+        """Map IPs to their corresponding regions using multithreading."""
         logging.info("Fetching Cloudflare colo data.")
         colo_data = self.fetch_cloudflare_colo_data()
         if not colo_data:
@@ -339,7 +342,6 @@ class CloudflareIPTester:
 
         with ThreadPoolExecutor(max_workers=20) as executor:
             future_to_ip = {executor.submit(process_ip, ip): ip for ip in ip_list}
-
             for future in as_completed(future_to_ip):
                 try:
                     region, ip = future.result()
@@ -351,22 +353,13 @@ class CloudflareIPTester:
         return region_ip_map
 
     def filter_ips_by_ping(self, ip_list: List[str]) -> List[Tuple[str, int]]:
-        """
-        Filter IPs based on ping response using multithreading.
-
-        :param ip_list: List of IP addresses
-        :return: List of tuples (IP, ping) for the top `max_ips` based on lowest ping
-        """
+        """Filter IPs based on ping response using multithreading."""
         def ping_ip(ip):
-            if self.force_ping_fallback or not PING_AVAILABLE:
-                # Force fallback method if configured or `ping3` is unavailable
-                return ip, self.get_ping_fallback(ip)
             return ip, self.get_ping(ip)
 
         ip_ping_results = []
         with ThreadPoolExecutor(max_workers=20) as executor:
             future_to_ip = {executor.submit(ping_ip, ip): ip for ip in ip_list}
-
             for future in as_completed(future_to_ip):
                 try:
                     ip, ping_time = future.result()
@@ -375,46 +368,33 @@ class CloudflareIPTester:
                 except Exception as e:
                     logging.error(f"Error pinging IP {future_to_ip[future]}: {e}")
 
-        # Sort by ping time and select the top `max_ips`
         ip_ping_results.sort(key=lambda x: x[1])
         return ip_ping_results[:self.max_ips]
 
     def run_tests(self) -> List[IPPerformanceMetrics]:
-        """
-        Run comprehensive IP performance tests.
-
-        :param stdscr: Curses window for display (optional)
-        :return: List of successful IP performance metrics
-        """
-        # Read and shuffle IPs
+        """Run comprehensive IP performance tests."""
         try:
             ip_list = self.read_ips(self.ip_file)
             random.shuffle(ip_list)
         except Exception as e:
             raise ValueError(f"Failed to read 'ip_list': {e}")
 
-        # Get map of corresponding region for each ip
         logging.info("Getting region for each IPs.")
         ip_region_map = self.map_ips_to_regions(ip_list)
         if not ip_region_map:
             raise RuntimeError("Can not get regions of IPs")
 
-        # Perform tests
         successful_ips: List[IPPerformanceMetrics] = []
         for region, ips in ip_region_map.items():
-            # Filter IPs by ping
             logging.info(f"Starting ping tests to filter IPs in region {region}.")
             filtered_ip = self.filter_ips_by_ping(ips)
             if not filtered_ip:
                 logging.warning("No IPs passed the ping filter.")
                 continue
 
-            # Testing IPs
             for ip, ping in filtered_ip:
                 logging.info(f"Testing IP: {ip}")
-
                 try:
-                    # Speed tests
                     download_speed = self.get_download_speed(ip)
                     if download_speed < self.min_download_speed:
                         logging.info(f"IP {ip} download speed too low: {download_speed}")
@@ -425,7 +405,6 @@ class CloudflareIPTester:
                         logging.info(f"IP {ip} upload speed too low: {upload_speed}")
                         continue
 
-                    # Save successful metrics
                     successful_ips.append(IPPerformanceMetrics(
                         ip=ip,
                         region=region,
@@ -433,36 +412,26 @@ class CloudflareIPTester:
                         upload_speed=upload_speed,
                         download_speed=download_speed
                     ))
-
                 except Exception as e:
                     logging.error(f"Unexpected error testing IP {ip}: {e}")
 
         return successful_ips
 
     def export_results(self, results: List[IPPerformanceMetrics]) -> None:
-        """
-        Export test results to CSV.
-
-        :param results: List of IP performance metrics
-        """
+        """Export test results to CSV."""
         try:
             with open(self.output_file, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)
-                # Write headers
                 writer.writerow(['IP', 'Region', 'Ping (ms)', 'Upload (Mbps)', 'Download (Mbps)'])
-
-                # Write results
                 for result in results:
                     writer.writerow(result.to_csv_row())
-
             logging.info(f"Results exported to {self.output_file}")
         except Exception as e:
             raise IOError(f"Critical error: Failed to export results: {e}")
 
+
 def main():
-    """
-    Main execution function with optional curses display.
-    """
+    """Main execution function."""
     try:
         tester = CloudflareIPTester()
         results = tester.run_tests()
@@ -475,7 +444,8 @@ def main():
             print("No suitable IPs found.")
     except Exception as e:
         logging.critical(f"Critical error occurred: {e}")
-        raise  # Re-raise to terminate with a stack trace
+        raise
+
 
 if __name__ == "__main__":
     main()

@@ -2,6 +2,7 @@ import os
 import requests
 import csv
 import configparser
+import ipaddress
 from typing import List, Dict, Any, Optional
 import logging
 
@@ -182,6 +183,15 @@ def read_input_csv(input_csv: str) -> Dict[str, List[str]]:
     return domain_ips
 
 
+def get_record_type(ip: str) -> str:
+    """Determine DNS record type based on IP version."""
+    try:
+        addr = ipaddress.ip_address(ip)
+        return "AAAA" if addr.version == 6 else "A"
+    except ValueError:
+        return "A"
+
+
 def main():
     # Load configuration
     config = load_config()
@@ -198,14 +208,29 @@ def main():
     # Read input CSV and process DNS records
     domain_ips = read_input_csv(input_csv)
     for domain, ips in domain_ips.items():
-        logger.info(f"Updating records for domain: {domain}")
-        dns_updater.update_multiple_dns_records(
-            record_name=domain,
-            record_type="A",  # Assuming "A" records, can be changed to another type if needed
-            new_content=ips,
-            proxied=False,
-            ttl=1
-        )
+        # Group IPs by type (A / AAAA)
+        a_ips = [ip for ip in ips if get_record_type(ip) == "A"]
+        aaaa_ips = [ip for ip in ips if get_record_type(ip) == "AAAA"]
+
+        if a_ips:
+            logger.info(f"Updating A records for domain: {domain}")
+            dns_updater.update_multiple_dns_records(
+                record_name=domain,
+                record_type="A",
+                new_content=a_ips,
+                proxied=False,
+                ttl=1
+            )
+
+        if aaaa_ips:
+            logger.info(f"Updating AAAA records for domain: {domain}")
+            dns_updater.update_multiple_dns_records(
+                record_name=domain,
+                record_type="AAAA",
+                new_content=aaaa_ips,
+                proxied=False,
+                ttl=1
+            )
 
     logger.info("DNS records updated successfully.")
 
