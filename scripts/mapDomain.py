@@ -111,7 +111,7 @@ def filter_ips():
     for row in filtered_data:
         domain = row[KEY_DOMAIN]
         region = row[KEY_REGION]
-        key = f"{domain}|{region}"
+        key = (domain, region)
         if region_count.get(key, INIT_COUNT) < max_ips[region]:
             print(f"Adding IP '{row[KEY_IP]}' to domain '{domain}' (region {region})")
             final_data.append({KEY_DOMAIN: domain, KEY_IP: row[KEY_IP]})
