@@ -29,38 +29,54 @@ logging.basicConfig(
 )
 
 # --- Network ---
+# Target hostname for TLS SNI and HTTP Host header
 CLOUDFLARE_HOST = "speed.cloudflare.com"
 CLOUDFLARE_PORT = 443
+# Per-connection timeout for proxy scanning (seconds)
 TIMEOUT = 1
+# Maximum concurrent asyncio tasks (semaphore cap)
 MAX_CONCURRENT = 2000
+# Log progress every N IPs scanned
 PROGRESS_INTERVAL = 50000
+# TCP socket read buffer size
 READ_BUFFER = 4096
 
 # --- HTTP ---
+# Sentinel to locate the end of HTTP headers
 HEADER_TERMINATOR = b"\r\n\r\n"
+# Offset past HEADER_TERMINATOR to reach response body
 HEADER_OFFSET = 4
 
 # --- URLs ---
+# Oracle Cloud public IP ranges JSON endpoint
 ORACLE_IP_RANGES_URL = "https://docs.oracle.com/en-us/iaas/tools/public_ip_ranges.json"
+# Cloudflare colo-to-region mapping CSV
 COLO_CSV_URL = "https://raw.githubusercontent.com/Netrvin/cloudflare-colo-list/refs/heads/main/DC-Colos.csv"
 
 # --- Timeouts ---
+# HTTP request timeout for fetching Oracle CIDRs
 FETCH_CIDRS_TIMEOUT = 30
+# HTTP request timeout for fetching colo CSV
 FETCH_COLO_TIMEOUT = 4
 
 # --- Trace parsing ---
+# Prefix that identifies the colo code in /cdn-cgi/trace responses
 COLO_PREFIX = "colo="
+# Fallback when colo is not found in the region lookup
 REGION_UNKNOWN = "Unknown"
+# Character used to replace spaces in region names (e.g. "North America" -> "North_America")
 REGION_SPACE_REPLACE = "_"
 
 # --- CSV ---
+# Output CSV column headers
 CSV_HEADERS = ["IP", "Colo", "Region"]
 
 # --- Config keys ---
-KEY_URL = "url"
+KEY_RANGES_URL = "ranges_url"
 KEY_OUTPUT_FILE = "output_file"
 
 # --- Defaults ---
+# Fallback output path if config.ini has no output_file
 DEFAULT_OUTPUT_FILE = "result/ips.csv"
 
 context = ssl.create_default_context()
@@ -68,7 +84,11 @@ context.check_hostname = True
 
 
 def fetch_oracle_cidrs(url: str = ORACLE_IP_RANGES_URL) -> List[str]:
-    """Fetch OCI CIDR ranges (only CIDRs tagged 'OCI')."""
+    """
+    Fetch OCI CIDR ranges from the Oracle public IP ranges JSON.
+
+    Only returns CIDRs tagged 'OCI' (excludes OSN, OBJECT_STORAGE, etc.).
+    """
     try:
         response = requests.get(url, timeout=FETCH_CIDRS_TIMEOUT)
         response.raise_for_status()
@@ -89,7 +109,11 @@ def fetch_oracle_cidrs(url: str = ORACLE_IP_RANGES_URL) -> List[str]:
 
 
 def fetch_cloudflare_colo_data() -> List[Dict[str, str]]:
-    """Fetch Cloudflare colo data from a remote CSV."""
+    """
+    Fetch the Cloudflare colo-to-region mapping CSV.
+
+    Returns a list of dicts with columns like 'colo', 'region', 'country', 'city'.
+    """
     try:
         response = requests.get(COLO_CSV_URL, timeout=FETCH_COLO_TIMEOUT)
         response.raise_for_status()
@@ -100,7 +124,13 @@ def fetch_cloudflare_colo_data() -> List[Dict[str, str]]:
 
 
 def get_region_from_colo(colo: str, colo_data: List[Dict[str, str]]) -> str:
-    """Find region for a given colo code."""
+    """
+    Look up the region name for a given colo code.
+
+    Matches against the colo mapping data and replaces spaces with underscores
+    (e.g. 'North America' -> 'North_America').
+    Returns REGION_UNKNOWN if no match is found.
+    """
     for row in colo_data:
         if row.get('colo') == colo:
             return row.get('region', REGION_UNKNOWN).replace(" ", REGION_SPACE_REPLACE)
@@ -109,8 +139,12 @@ def get_region_from_colo(colo: str, colo_data: List[Dict[str, str]]) -> str:
 
 async def scan_proxy(ip: str) -> Optional[str]:
     """
-    Connect to IP:443 with TLS SNI=CLOUDFLARE_HOST, send /cdn-cgi/trace,
-    return colo code if Cloudflare proxy, else None.
+    Test a single IP for Cloudflare proxy behavior.
+
+    Connects to the IP on port 443 with TLS SNI set to speed.cloudflare.com,
+    sends a GET /cdn-cgi/trace request, and checks the response body for a
+    'colo=' line. Returns the colo code if the IP is a Cloudflare proxy,
+    or None if the connection or check fails.
     """
     try:
         reader, writer = await asyncio.wait_for(
@@ -136,6 +170,7 @@ async def scan_proxy(ip: str) -> Optional[str]:
         writer.close()
         await writer.wait_closed()
 
+        # Separate HTTP headers from body to find the colo code
         header_end = data.find(HEADER_TERMINATOR)
         if header_end == -1:
             return None
@@ -152,8 +187,12 @@ async def scan_proxy(ip: str) -> Optional[str]:
 
 async def scan_all(cidrs: List[str], colo_data: List[Dict[str, str]]) -> List[Tuple[str, str, str]]:
     """
-    Scan ALL IPs in all CIDRs using asyncio with a semaphore cap.
-    Returns list of (ip, colo, region) tuples.
+    Scan all IPs across all CIDR ranges concurrently.
+
+    Uses an asyncio.Semaphore to cap concurrency at MAX_CONCURRENT.
+    Every IP competes fairly for a slot — no single CIDR can monopolize.
+
+    Returns a list of (ip, colo, region) tuples for every proxy found.
     """
     sem = asyncio.Semaphore(MAX_CONCURRENT)
     results: List[Tuple[str, str, str]] = []
@@ -173,6 +212,7 @@ async def scan_all(cidrs: List[str], colo_data: List[Dict[str, str]]) -> List[Tu
             if scanned % PROGRESS_INTERVAL == 0:
                 logging.info(f"Scanned {scanned:,} IPs, found {len(results)} proxies")
 
+    # Count total addresses for progress reporting
     total_addresses = 0
     for cidr in cidrs:
         try:
@@ -183,6 +223,7 @@ async def scan_all(cidrs: List[str], colo_data: List[Dict[str, str]]) -> List[Tu
 
     logging.info(f"Total addresses across all CIDRs: {total_addresses:,}")
 
+    # Scan every host in every CIDR
     for cidr in cidrs:
         try:
             network = ipaddress.ip_network(cidr, strict=False)
@@ -197,6 +238,7 @@ async def scan_all(cidrs: List[str], colo_data: List[Dict[str, str]]) -> List[Tu
             active_tasks.add(task)
             task.add_done_callback(active_tasks.discard)
 
+    # Wait for all in-flight tasks to complete
     if active_tasks:
         await asyncio.wait(active_tasks)
 
@@ -205,11 +247,19 @@ async def scan_all(cidrs: List[str], colo_data: List[Dict[str, str]]) -> List[Tu
 
 
 def main():
+    """Entry point: load config, fetch CIDRs, scan, save results."""
+    global TIMEOUT, MAX_CONCURRENT, FETCH_CIDRS_TIMEOUT, FETCH_COLO_TIMEOUT, COLO_CSV_URL
+
     config = configparser.ConfigParser()
     config.read("config.ini")
 
-    oracle_url = config.get('getIPs', KEY_URL, fallback=ORACLE_IP_RANGES_URL)
+    oracle_url = config.get('getIPs', KEY_RANGES_URL, fallback=ORACLE_IP_RANGES_URL)
     output_file = config.get('getIPs', KEY_OUTPUT_FILE, fallback=DEFAULT_OUTPUT_FILE)
+    TIMEOUT = config.getint('getIPs', 'timeout', fallback=TIMEOUT)
+    MAX_CONCURRENT = config.getint('getIPs', 'max_concurrent', fallback=MAX_CONCURRENT)
+    FETCH_CIDRS_TIMEOUT = config.getint('getIPs', 'fetch_cidrs_timeout', fallback=FETCH_CIDRS_TIMEOUT)
+    FETCH_COLO_TIMEOUT = config.getint('getIPs', 'fetch_colo_timeout', fallback=FETCH_COLO_TIMEOUT)
+    COLO_CSV_URL = config.get('getIPs', 'region_url', fallback=COLO_CSV_URL)
 
     logging.info(f"Fetching Cloudflare colo data from {COLO_CSV_URL}")
     colo_data = fetch_cloudflare_colo_data()

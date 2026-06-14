@@ -9,12 +9,19 @@ KEY_FILE_IPS = "file_ips"
 KEY_FILE_TESTS = "file_tests"
 KEY_OUTPUT_FILE = "output_file"
 
+# --- Config defaults ---
+DEFAULT_FILE_IPS = "result/ips.csv"
+DEFAULT_FILE_TESTS = "result/tested-ips.csv"
+DEFAULT_OUTPUT_FILE = "result/domains-ips.csv"
+
 # --- CSV column names ---
+# These must match the headers in ips.csv and tested-ips.csv
 COL_IP = "IP"
 COL_REGION = "Region"
 COL_DOWNLOAD = "Download (Mbps)"
 
 # --- Dict keys ---
+# Internal keys used for the filtered_data dict
 KEY_DOMAIN = "Domain"
 KEY_IP = "IP"
 KEY_DOWNLOAD = "Download"
@@ -28,12 +35,20 @@ FALLBACK_DIR = "."
 
 
 def filter_ips():
+    """
+    Main pipeline step: join tested IPs with their regions, filter by
+    configured domain map, cap per region, and write the result.
+
+    Reads ips.csv for IP-to-region mapping, tested-ips.csv for performance
+    data, and config.ini [mapDomain.map] to determine which regions map to
+    which domains and how many IPs each region can contribute.
+    """
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
 
-    ip_csv = config.get('mapDomain', KEY_FILE_IPS)
-    input_csv = config.get('mapDomain', KEY_FILE_TESTS)
-    output_file = config.get('mapDomain', KEY_OUTPUT_FILE)
+    ip_csv = config.get('mapDomain', KEY_FILE_IPS, fallback=DEFAULT_FILE_IPS)
+    input_csv = config.get('mapDomain', KEY_FILE_TESTS, fallback=DEFAULT_FILE_TESTS)
+    output_file = config.get('mapDomain', KEY_OUTPUT_FILE, fallback=DEFAULT_OUTPUT_FILE)
     print(f"IP CSV path: {ip_csv}")
     print(f"Input CSV path: {input_csv}")
     print(f"Output file path: {output_file}")
@@ -42,12 +57,15 @@ def filter_ips():
     print("Loading domain mapping and max IP limits...")
     domain_map = {}
     max_ips = {}
-    for region, mapping in config.items('mapDomain.map'):
-        domain, max_ip = mapping.split(',')
-        region_lower = region.strip().lower()
-        domain_map[region_lower] = domain.strip()
-        max_ips[region_lower] = int(max_ip.strip())
-        print(f"Mapped region '{region.strip()}' to domain '{domain.strip()}' with max IPs: {max_ip.strip()}")
+    if config.has_section('mapDomain.map'):
+        for region, mapping in config.items('mapDomain.map'):
+            domain, max_ip = mapping.split(',')
+            region_lower = region.strip().lower()
+            domain_map[region_lower] = domain.strip()
+            max_ips[region_lower] = int(max_ip.strip())
+            print(f"Mapped region '{region.strip()}' to domain '{domain.strip()}' with max IPs: {max_ip.strip()}")
+    else:
+        print("Warning: [mapDomain.map] section not found in config. No domain mapping will be applied.")
 
     # Build IP -> Region lookup from ips.csv
     print(f"Building IP-to-region map from {ip_csv}...")
@@ -80,11 +98,12 @@ def filter_ips():
             else:
                 print(f"Skipping IP {ip} with region '{region}' (no mapping found)")
 
-    # Sort data by Download (Mbps) and then by Domain
+    # Sort by domain then download speed (highest first) so the best IPs
+    # are selected first when we apply the per-domain cap
     print("Sorting data by Domain and Download speed...")
     filtered_data.sort(key=itemgetter(KEY_DOMAIN, KEY_DOWNLOAD), reverse=SORT_REVERSE)
 
-    # Limit the number of IPs per domain
+    # Cap the number of IPs per domain based on each region's max_ip limit
     print("Limiting the number of IPs per domain...")
     domain_ip_count = {domain: INIT_COUNT for domain in domain_map.values()}
     final_data = []
@@ -97,7 +116,7 @@ def filter_ips():
         else:
             print(f"Skipping IP '{row[KEY_IP]}' for domain '{domain}' (max limit reached)")
 
-    # Write to output CSV
+    # Write the final domain-to-IP mapping to CSV
     print("Writing data to output CSV...")
     os.makedirs(os.path.dirname(output_file) or FALLBACK_DIR, exist_ok=True)
     with open(output_file, 'w', newline='') as outfile:
