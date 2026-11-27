@@ -22,7 +22,6 @@ IP,Colo,Region
 129.146.254.222,LAX,North_America
 129.146.32.31,LAX,North_America
 129.146.37.230,LAX,North_America
-129.146.43.56,LAX,North_America
 129.146.44.68,LAX,North_America
 129.146.46.164,LAX,North_America
 129.146.62.147,LAX,North_America
@@ -40,10 +39,10 @@ IP,Colo,Region
 129.151.124.127,SCL,South_America
 129.151.204.65,ORD,North_America
 129.151.205.48,ARN,Europe
-129.151.29.62,LAX,North_America
 129.151.70.70,LHR,Europe
 129.152.15.103,FRA,Europe
 129.153.129.25,IAD,North_America
+129.153.158.74,IAD,North_America
 129.153.206.0,LAX,North_America
 129.153.208.246,LAX,North_America
 129.153.210.205,LAX,North_America
@@ -76,11 +75,15 @@ IP,Colo,Region
 129.159.41.150,SJC,North_America
 129.159.8.169,FRA,Europe
 129.159.84.71,IAD,North_America
+129.203.138.84,NRT,Asia_Pacific
+129.203.141.227,SIN,Asia_Pacific
 129.213.137.250,IAD,North_America
 129.213.148.107,IAD,North_America
+129.213.162.64,IAD,North_America
 129.213.60.177,IAD,North_America
 129.213.94.19,IAD,North_America
 129.221.143.59,SIN,Asia_Pacific
+129.221.157.248,SIN,Asia_Pacific
 129.221.162.140,SIN,Asia_Pacific
 129.221.163.34,SIN,Asia_Pacific
 129.221.170.188,SIN,Asia_Pacific
@@ -88,10 +91,9 @@ IP,Colo,Region
 129.221.173.134,SIN,Asia_Pacific
 129.221.176.34,SIN,Asia_Pacific
 129.221.181.70,SIN,Asia_Pacific
-129.221.187.28,SIN,Asia_Pacific
-129.221.188.66,SIN,Asia_Pacific
 129.221.191.212,SIN,Asia_Pacific
 129.221.208.153,SIN,Asia_Pacific
+129.221.211.211,SIN,Asia_Pacific
 129.221.213.3,SIN,Asia_Pacific
 129.221.220.183,SIN,Asia_Pacific
 129.221.234.85,SIN,Asia_Pacific
@@ -101,6 +103,7 @@ IP,Colo,Region
 129.225.104.15,BOM,Asia_Pacific
 129.225.111.191,BOM,Asia_Pacific
 129.225.119.104,BOM,Asia_Pacific
+129.225.142.193,KIX,Asia_Pacific
 129.225.143.102,KIX,Asia_Pacific
 129.225.144.14,KIX,Asia_Pacific
 129.225.145.110,KIX,Asia_Pacific
@@ -112,7 +115,7 @@ IP,Colo,Region
 129.225.158.79,KIX,Asia_Pacific
 129.225.159.140,KIX,Asia_Pacific
 129.225.161.162,KIX,Asia_Pacific
-129.225.162.137,SEA,North_America
+129.225.162.137,KIX,Asia_Pacific
 129.225.164.234,KIX,Asia_Pacific
 129.225.168.98,KIX,Asia_Pacific
 129.225.172.166,KIX,Asia_Pacific
@@ -132,7 +135,6 @@ IP,Colo,Region
 129.80.255.149,IAD,North_America
 130.110.126.181,MXP,Europe
 130.110.249.47,MRS,Europe
-130.110.68.108,FRA,Europe
 130.110.7.69,FRA,Europe
 130.162.188.49,LHR,Europe
 130.162.190.247,LHR,Europe
@@ -157,7 +159,6 @@ IP,Colo,Region
 130.61.240.253,FRA,Europe
 130.61.254.42,CDG,Europe
 130.61.254.55,CDG,Europe
-130.61.29.111,FRA,Europe
 130.61.32.119,FRA,Europe
 130.61.34.144,FRA,Europe
 130.61.38.70,FRA,Europe
@@ -178,7 +179,6 @@ IP,Colo,Region
 131.186.59.112,NRT,Asia_Pacific
 131.186.59.49,NRT,Asia_Pacific
 132.145.102.209,YYZ,North_America
-132.145.112.202,NRT,Asia_Pacific
 132.145.122.153,NRT,Asia_Pacific
 132.145.142.174,IAD,North_America
 132.145.145.12,IAD,North_America
@@ -189,7 +189,6 @@ IP,Colo,Region
 132.145.225.8,FRA,Europe
 132.145.23.158,LHR,Europe
 132.145.232.171,FRA,Europe
-132.145.25.62,LHR,Europe
 132.145.31.12,LHR,Europe
 132.145.46.142,LHR,Europe
 132.145.73.22,LHR,Europe
@@ -199,7 +198,6 @@ IP,Colo,Region
 132.145.90.227,ICN,Asia_Pacific
 132.145.91.135,ICN,Asia_Pacific
 132.145.96.51,AMS,Europe
-132.226.10.153,NRT,Asia_Pacific
 132.226.111.42,LAX,North_America
 132.226.113.185,LAX,North_America
 132.226.147.190,LAX,North_America
@@ -212,9 +210,11 @@ IP,Colo,Region
 132.226.199.170,FRA,Europe
 132.226.20.12,ICN,Asia_Pacific
 132.226.218.19,ZRH,Europe
+132.226.229.153,ICN,Asia_Pacific
 132.226.23.185,ICN,Asia_Pacific
 132.226.29.245,LAX,North_America
 132.226.37.251,IAD,North_America
+132.226.50.200,IAD,North_America
 132.226.67.208,LAX,North_America
 132.226.73.78,LAX,North_America
 132.226.75.49,LAX,North_America
@@ -223,6 +223,7 @@ IP,Colo,Region
 132.226.88.73,LAX,North_America
 134.185.108.22,SIN,Asia_Pacific
 134.185.120.205,SIN,Asia_Pacific
+134.185.122.252,ICN,Asia_Pacific
 134.185.123.161,NRT,Asia_Pacific
 134.185.126.15,SIN,Asia_Pacific
 134.185.81.234,SIN,Asia_Pacific
@@ -275,12 +276,15 @@ IP,Colo,Region
 138.2.37.59,KIX,Asia_Pacific
 138.2.41.26,KIX,Asia_Pacific
 138.2.41.8,KIX,Asia_Pacific
+138.2.43.153,KIX,Asia_Pacific
 138.2.44.32,KIX,Asia_Pacific
+138.2.47.128,KIX,Asia_Pacific
 138.2.47.198,KIX,Asia_Pacific
 138.2.5.136,NRT,Asia_Pacific
 138.2.52.152,KIX,Asia_Pacific
 138.2.52.92,KIX,Asia_Pacific
 138.2.66.236,SIN,Asia_Pacific
+138.2.69.192,SIN,Asia_Pacific
 138.2.83.57,SIN,Asia_Pacific
 138.2.87.237,SIN,Asia_Pacific
 138.2.89.77,SIN,Asia_Pacific
@@ -288,18 +292,17 @@ IP,Colo,Region
 138.2.95.33,SIN,Asia_Pacific
 138.3.212.137,NRT,Asia_Pacific
 138.3.254.178,FRA,Europe
-139.185.59.24,DXB,Middle_East
+139.185.59.24,FRA,Europe
 140.238.0.19,ICN,Asia_Pacific
-140.238.101.144,LHR,Europe
 140.238.12.45,NRT,Asia_Pacific
 140.238.123.45,LHR,Europe
 140.238.144.211,YYZ,North_America
 140.238.15.158,ICN,Asia_Pacific
 140.238.152.47,YYZ,North_America
 140.238.152.64,YYZ,North_America
-140.238.155.193,YYZ,North_America
 140.238.156.227,YYZ,North_America
 140.238.17.180,ICN,Asia_Pacific
+140.238.170.32,ZRH,Europe
 140.238.19.46,ICN,Asia_Pacific
 140.238.198.5,SYD,Oceania
 140.238.2.201,ICN,Asia_Pacific
@@ -311,12 +314,11 @@ IP,Colo,Region
 140.238.243.1,BOM,Asia_Pacific
 140.238.243.203,BOM,Asia_Pacific
 140.238.3.146,ICN,Asia_Pacific
-140.238.32.160,NRT,Asia_Pacific
 140.238.37.224,NRT,Asia_Pacific
 140.238.4.65,ICN,Asia_Pacific
 140.238.47.78,NRT,Asia_Pacific
-140.238.49.48,NRT,Asia_Pacific
 140.238.5.86,ICN,Asia_Pacific
+140.238.50.134,NRT,Asia_Pacific
 140.238.50.168,NRT,Asia_Pacific
 140.238.53.35,NRT,Asia_Pacific
 140.238.58.187,NRT,Asia_Pacific
@@ -325,7 +327,6 @@ IP,Colo,Region
 140.238.8.92,ICN,Asia_Pacific
 140.238.83.170,LHR,Europe
 140.245.100.157,SIN,Asia_Pacific
-140.245.102.243,SIN,Asia_Pacific
 140.245.107.213,SIN,Asia_Pacific
 140.245.109.76,SIN,Asia_Pacific
 140.245.112.190,SIN,Asia_Pacific
@@ -334,6 +335,7 @@ IP,Colo,Region
 140.245.116.89,SIN,Asia_Pacific
 140.245.121.84,SIN,Asia_Pacific
 140.245.125.104,SIN,Asia_Pacific
+140.245.126.177,SIN,Asia_Pacific
 140.245.201.113,BOM,Asia_Pacific
 140.245.215.6,BOM,Asia_Pacific
 140.245.222.123,BOM,Asia_Pacific
@@ -357,12 +359,12 @@ IP,Colo,Region
 140.245.97.213,SIN,Asia_Pacific
 140.245.97.215,SIN,Asia_Pacific
 140.245.98.95,SIN,Asia_Pacific
-140.83.48.48,KIX,Asia_Pacific
+140.83.48.48,NRT,Asia_Pacific
 140.83.50.165,KIX,Asia_Pacific
 140.83.51.32,KIX,Asia_Pacific
-140.83.52.104,SJC,North_America
+140.83.52.104,KIX,Asia_Pacific
 140.83.53.180,KIX,Asia_Pacific
-140.83.58.91,LAX,North_America
+140.83.58.91,NRT,Asia_Pacific
 140.83.61.171,KIX,Asia_Pacific
 140.83.87.149,KIX,Asia_Pacific
 140.84.160.227,QRO,North_America
@@ -380,7 +382,6 @@ IP,Colo,Region
 141.147.155.213,KIX,Asia_Pacific
 141.147.157.204,KIX,Asia_Pacific
 141.147.162.33,NRT,Asia_Pacific
-141.147.169.152,NRT,Asia_Pacific
 141.147.171.19,NRT,Asia_Pacific
 141.147.171.3,NRT,Asia_Pacific
 141.147.174.243,NRT,Asia_Pacific
@@ -395,12 +396,12 @@ IP,Colo,Region
 141.148.160.83,LAX,North_America
 141.148.161.219,LAX,North_America
 141.148.172.245,LAX,North_America
+141.148.177.166,LAX,North_America
 141.148.186.22,LAX,North_America
 141.148.187.195,LAX,North_America
 141.148.194.167,BOM,Asia_Pacific
 141.148.206.88,BOM,Asia_Pacific
 141.148.70.30,IAD,North_America
-141.253.118.230,MUC,Europe
 141.253.194.63,MAD,Europe
 143.47.108.112,IAD,North_America
 143.47.245.233,LHR,Europe
@@ -412,7 +413,6 @@ IP,Colo,Region
 144.24.140.37,BOM,Asia_Pacific
 144.24.152.218,BOM,Asia_Pacific
 144.24.152.54,BOM,Asia_Pacific
-144.24.16.187,LAX,North_America
 144.24.207.108,MRS,Europe
 144.24.228.237,LHR,Europe
 144.24.246.106,ZRH,Europe
@@ -422,7 +422,6 @@ IP,Colo,Region
 144.24.29.184,LAX,North_America
 144.24.30.113,LAX,North_America
 144.24.50.73,LAX,North_America
-144.24.52.47,LAX,North_America
 144.24.53.151,LAX,North_America
 144.24.55.252,LAX,North_America
 144.24.60.10,LAX,North_America
@@ -441,10 +440,9 @@ IP,Colo,Region
 146.235.192.77,SJC,North_America
 146.235.199.164,SJC,North_America
 146.235.199.231,SJC,North_America
-146.235.200.182,SJC,North_America
 146.235.202.197,SJC,North_America
-146.235.203.87,SJC,North_America
 146.235.205.133,SJC,North_America
+146.235.213.124,SJC,North_America
 146.235.215.168,SJC,North_America
 146.235.218.116,SJC,North_America
 146.235.219.14,SJC,North_America
@@ -463,7 +461,6 @@ IP,Colo,Region
 146.56.171.239,ICN,Asia_Pacific
 146.56.172.209,ICN,Asia_Pacific
 146.56.176.187,ICN,Asia_Pacific
-146.56.180.103,ICN,Asia_Pacific
 146.56.188.74,ICN,Asia_Pacific
 146.56.190.133,ICN,Asia_Pacific
 146.56.38.232,ICN,Asia_Pacific
@@ -482,7 +479,6 @@ IP,Colo,Region
 147.224.61.135,SJC,North_America
 147.224.63.167,SJC,North_America
 147.224.9.4,SJC,North_America
-147.5.102.138,YYZ,North_America
 148.116.81.218,EWR,North_America
 149.118.130.71,SIN,Asia_Pacific
 149.118.138.164,SIN,Asia_Pacific
@@ -497,6 +493,7 @@ IP,Colo,Region
 150.136.105.229,IAD,North_America
 150.136.117.165,IAD,North_America
 150.136.139.228,IAD,North_America
+150.136.145.70,IAD,North_America
 150.136.160.138,IAD,North_America
 150.136.173.210,IAD,North_America
 150.136.243.175,IAD,North_America
@@ -504,7 +501,6 @@ IP,Colo,Region
 150.136.58.0,IAD,North_America
 150.136.62.130,IAD,North_America
 150.136.62.219,IAD,North_America
-150.136.77.225,IAD,North_America
 150.136.81.108,IAD,North_America
 150.136.87.192,IAD,North_America
 150.230.116.94,LHR,Europe
@@ -516,7 +512,7 @@ IP,Colo,Region
 150.230.206.253,NRT,Asia_Pacific
 150.230.212.247,NRT,Asia_Pacific
 150.230.217.173,NRT,Asia_Pacific
-150.230.245.241,MXP,Europe
+150.230.245.241,MRS,Europe
 150.230.35.200,SJC,North_America
 150.230.38.45,SJC,North_America
 150.230.38.74,SJC,North_America
@@ -524,11 +520,12 @@ IP,Colo,Region
 150.230.41.59,SJC,North_America
 150.230.60.62,KIX,Asia_Pacific
 150.230.62.50,KIX,Asia_Pacific
+150.230.63.93,KIX,Asia_Pacific
 150.230.78.183,GRU,South_America
-151.145.33.145,YYZ,North_America
-151.145.42.203,YYZ,North_America
-151.145.61.12,YYZ,North_America
-151.145.62.31,YYZ,North_America
+151.145.33.145,YUL,North_America
+151.145.42.203,YUL,North_America
+151.145.61.12,YUL,North_America
+151.145.62.31,YUL,North_America
 151.145.78.30,NRT,Asia_Pacific
 151.145.78.99,NRT,Asia_Pacific
 152.67.125.161,SYD,Oceania
@@ -552,7 +549,6 @@ IP,Colo,Region
 152.67.79.135,ZRH,Europe
 152.67.81.69,ZRH,Europe
 152.67.85.239,ZRH,Europe
-152.67.99.162,SYD,Oceania
 152.69.199.75,KIX,Asia_Pacific
 152.69.200.164,KIX,Asia_Pacific
 152.69.200.216,KIX,Asia_Pacific
@@ -580,7 +576,7 @@ IP,Colo,Region
 152.70.233.193,ICN,Asia_Pacific
 152.70.239.74,ICN,Asia_Pacific
 152.70.24.49,FRA,Europe
-152.70.244.205,ICN,Asia_Pacific
+152.70.246.173,ICN,Asia_Pacific
 152.70.250.254,ICN,Asia_Pacific
 152.70.253.44,ICN,Asia_Pacific
 152.70.253.84,ICN,Asia_Pacific
@@ -620,7 +616,6 @@ IP,Colo,Region
 158.101.84.125,NRT,Asia_Pacific
 158.101.91.152,NRT,Asia_Pacific
 158.101.97.163,IAD,North_America
-158.178.155.87,AMS,Europe
 158.178.205.223,CDG,Europe
 158.179.164.72,ICN,Asia_Pacific
 158.179.175.119,SIN,Asia_Pacific
@@ -674,6 +669,7 @@ IP,Colo,Region
 161.118.229.80,SIN,Asia_Pacific
 161.118.232.138,SIN,Asia_Pacific
 161.118.237.18,SIN,Asia_Pacific
+161.118.238.130,SIN,Asia_Pacific
 161.118.239.121,SIN,Asia_Pacific
 161.118.239.161,SIN,Asia_Pacific
 161.118.239.25,SIN,Asia_Pacific
@@ -698,6 +694,7 @@ IP,Colo,Region
 161.33.129.98,NRT,Asia_Pacific
 161.33.133.222,NRT,Asia_Pacific
 161.33.135.154,NRT,Asia_Pacific
+161.33.14.212,KIX,Asia_Pacific
 161.33.146.130,NRT,Asia_Pacific
 161.33.149.10,NRT,Asia_Pacific
 161.33.15.101,KIX,Asia_Pacific
@@ -723,7 +720,6 @@ IP,Colo,Region
 161.33.191.227,NRT,Asia_Pacific
 161.33.194.204,NRT,Asia_Pacific
 161.33.196.249,NRT,Asia_Pacific
-161.33.197.129,NRT,Asia_Pacific
 161.33.200.13,NRT,Asia_Pacific
 161.33.204.246,NRT,Asia_Pacific
 161.33.206.185,NRT,Asia_Pacific
@@ -753,7 +749,7 @@ IP,Colo,Region
 161.33.40.214,KIX,Asia_Pacific
 161.33.43.55,KIX,Asia_Pacific
 161.33.45.141,KIX,Asia_Pacific
-161.33.47.190,LAX,North_America
+161.33.47.190,KIX,Asia_Pacific
 161.33.47.66,KIX,Asia_Pacific
 161.33.5.55,KIX,Asia_Pacific
 161.33.6.197,KIX,Asia_Pacific
@@ -775,6 +771,7 @@ IP,Colo,Region
 163.192.25.110,SJC,North_America
 163.192.25.172,SJC,North_America
 163.192.26.3,SJC,North_America
+163.192.27.167,SJC,North_America
 163.192.3.96,SJC,North_America
 163.192.33.7,SJC,North_America
 163.192.35.205,SJC,North_America
@@ -823,7 +820,7 @@ IP,Colo,Region
 168.107.8.118,ICN,Asia_Pacific
 168.107.82.210,SIN,Asia_Pacific
 168.107.83.238,SIN,Asia_Pacific
-168.107.85.25,SIN,Asia_Pacific
+168.107.87.11,SIN,Asia_Pacific
 168.107.87.131,SIN,Asia_Pacific
 168.107.88.7,SIN,Asia_Pacific
 168.107.90.104,SIN,Asia_Pacific
@@ -866,7 +863,6 @@ IP,Colo,Region
 168.138.169.93,SIN,Asia_Pacific
 168.138.176.180,SIN,Asia_Pacific
 168.138.177.32,SIN,Asia_Pacific
-168.138.179.69,SIN,Asia_Pacific
 168.138.186.126,SIN,Asia_Pacific
 168.138.186.56,SIN,Asia_Pacific
 168.138.189.82,SIN,Asia_Pacific
@@ -880,7 +876,6 @@ IP,Colo,Region
 168.138.29.110,MEL,Oceania
 168.138.38.58,KIX,Asia_Pacific
 168.138.42.31,KIX,Asia_Pacific
-168.138.46.67,KIX,Asia_Pacific
 168.138.51.5,KIX,Asia_Pacific
 168.138.52.221,KIX,Asia_Pacific
 168.138.6.212,MEL,Oceania
@@ -914,7 +909,6 @@ IP,Colo,Region
 192.9.159.92,SJC,North_America
 192.9.163.129,SYD,Oceania
 192.9.181.215,SYD,Oceania
-192.9.190.200,SYD,Oceania
 192.9.234.46,SJC,North_America
 192.9.236.252,SJC,North_America
 192.9.237.242,SJC,North_America
@@ -951,9 +945,7 @@ IP,Colo,Region
 213.35.116.86,SIN,Asia_Pacific
 213.35.118.169,SIN,Asia_Pacific
 213.35.119.104,SIN,Asia_Pacific
-213.35.119.149,SIN,Asia_Pacific
 213.35.119.83,SIN,Asia_Pacific
-213.35.123.210,SIN,Asia_Pacific
 213.35.123.85,SIN,Asia_Pacific
 213.35.98.232,SIN,Asia_Pacific
 217.142.132.166,ICN,Asia_Pacific
@@ -966,7 +958,7 @@ IP,Colo,Region
 217.142.232.60,KIX,Asia_Pacific
 217.142.233.13,KIX,Asia_Pacific
 217.142.233.175,KIX,Asia_Pacific
-217.142.233.41,KIX,Asia_Pacific
+217.142.233.41,SJC,North_America
 217.142.236.152,KIX,Asia_Pacific
 217.142.244.178,KIX,Asia_Pacific
 217.142.245.46,KIX,Asia_Pacific
@@ -990,8 +982,7 @@ IP,Colo,Region
 40.233.99.248,YYZ,North_America
 51.170.178.234,AMS,Europe
 51.170.188.77,AMS,Europe
-64.110.100.232,NRT,Asia_Pacific
-64.110.101.125,KIX,Asia_Pacific
+64.110.100.232,SJC,North_America
 64.110.101.181,KIX,Asia_Pacific
 64.110.102.208,KIX,Asia_Pacific
 64.110.104.119,KIX,Asia_Pacific
@@ -1009,6 +1000,7 @@ IP,Colo,Region
 64.181.232.147,SJC,North_America
 64.181.233.0,SJC,North_America
 64.181.237.24,SJC,North_America
+64.181.240.173,SJC,North_America
 64.181.241.217,SJC,North_America
 64.181.242.241,SJC,North_America
 64.181.247.222,SJC,North_America
@@ -1016,6 +1008,7 @@ IP,Colo,Region
 64.181.250.79,SJC,North_America
 64.181.251.32,SJC,North_America
 64.181.252.151,SJC,North_America
+64.181.252.38,SJC,North_America
 64.181.255.215,SJC,North_America
 68.233.104.133,BOM,Asia_Pacific
 68.233.106.255,BOM,Asia_Pacific
@@ -1025,8 +1018,6 @@ IP,Colo,Region
 79.72.17.108,ARN,Europe
 79.72.43.181,FRA,Europe
 79.72.72.7,LHR,Europe
-79.72.73.4,LHR,Europe
-79.72.76.142,LHR,Europe
 79.72.88.64,LHR,Europe
 79.72.91.32,LHR,Europe
 79.76.105.178,FRA,Europe
@@ -1040,7 +1031,7 @@ IP,Colo,Region
 80.225.233.118,BOM,Asia_Pacific
 80.225.233.217,BOM,Asia_Pacific
 80.225.242.194,BOM,Asia_Pacific
-80.225.64.251,JED,Middle_East
+80.225.64.251,MXP,Europe
 80.225.83.28,FRA,Europe
 80.225.86.82,FRA,Europe
 82.70.232.70,MRS,Europe
@@ -1049,22 +1040,22 @@ IP,Colo,Region
 82.70.251.114,MRS,Europe
 82.70.41.158,ARN,Europe
 82.70.49.45,ARN,Europe
-84.12.137.8,DXB,Middle_East
+84.12.137.8,FRA,Europe
 84.12.138.140,DXB,Middle_East
 84.12.149.91,CDG,Europe
-84.12.165.170,DXB,Middle_East
-84.12.190.250,LHR,Europe
+84.12.152.107,DXB,Middle_East
+84.12.165.170,FRA,Europe
+84.12.190.250,MRS,Europe
 84.12.73.255,JNB,Africa
 84.235.160.206,AMS,Europe
 84.235.167.198,AMS,Europe
 84.235.167.35,AMS,Europe
 84.235.169.125,AMS,Europe
-84.235.183.41,AMS,Europe
 84.235.187.10,AMS,Europe
 84.235.232.207,MRS,Europe
 84.235.235.246,MRS,Europe
 84.235.241.124,DXB,Middle_East
-84.235.255.82,DXB,Middle_East
+84.235.255.82,FRA,Europe
 84.8.145.58,LHR,Europe
 84.8.156.61,LHR,Europe
 84.8.157.253,LHR,Europe
@@ -1096,7 +1087,6 @@ IP,Colo,Region
 92.5.43.180,FRA,Europe
 92.5.55.37,FRA,Europe
 92.5.58.138,FRA,Europe
-92.5.71.177,FRA,Europe
 92.5.81.23,FRA,Europe
 92.5.85.78,FRA,Europe
 92.5.93.154,FRA,Europe
